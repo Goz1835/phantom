@@ -52,7 +52,7 @@ module setup
  real :: apophis_spin_period
  real :: apophis_spin_axis(3)
  real :: apophis_spin_torque_align_deg ! torque-align angle (deg); -1 = use apophis_spin_axis_*
-
+ logical :: use_dem,apophis_only
  private
 
 contains
@@ -68,7 +68,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
                          isdead_or_accreted
  use dim,           only:do_evolveddensity
  use setbinary,     only:set_binary
- use units,         only:set_units,umass,udist,unit_density,unit_velocity,utime,in_code_units,in_units
+ use units,         only:set_units,umass,udist,unit_density,unit_velocity,utime,in_code_units,in_units,in_units
  use physcon,       only:solarm,pi,au,km,solarr,ceresm,earthm,earthr,days
  use io,            only:master,fatal,warning
  use timestep,      only:tmax,dtmax

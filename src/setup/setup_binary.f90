@@ -69,6 +69,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,&
  use infile_utils,   only:get_options,infile_exists
  use ptmass,         only:isink_potential
  use timestep,       only:tmax,dtmax
+ use ptmass,         only:isink_potential
  integer,           intent(in)    :: id
  integer,           intent(inout) :: npart
  integer,           intent(out)   :: npartoftype(:)
@@ -212,6 +213,12 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,&
  xyzmh_ptmass(1,nptmass) = xyzmh_ptmass(1,1) - 0.125
  xyzmh_ptmass(2,nptmass) = xyzmh_ptmass(2,1) - 0.25
  vxyz_ptmass(:,nptmass) = 0.
+
+ alphau = min(0.1,alphau)
+ if (.not.infile_exists(fileprefix) .and. nstar == 2) then
+    tmax = norbits * orbit%period
+    dtmax = deltat * orbit%period
+ endif
 
  alphau = min(0.1,alphau)
  if (.not.infile_exists(fileprefix) .and. nstar == 2) then
