@@ -83,6 +83,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use setup_params,  only:npart_total
  use orbits,        only:get_pericentre_distance,get_eccentricity
  use infile_utils,  only:get_options
+ use ptmass,        only:isink_potential
  use viscosity,     only:irealvisc
  use ptmass,        only:isink_potential
  integer,           intent(in)    :: id
