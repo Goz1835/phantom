@@ -160,8 +160,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
                             ' g or ',m_apophis*umass/ceresm,' ceres masses'
     print "(a,1pg10.3,a)",' density is ',m_apophis/(4./3.*pi*r_apophis**3)*unit_density,' g/cm^3'
 
-    rtidal = 1 
-    ! this is actuall what rtidal should be: r_apophis*(earthm/umass/m_apophis)**(1./3.)
+    rtidal = r_apophis*(earthm/umass/m_apophis)**(1./3.)
     print "(3(a,1pg10.3),a)",' r_tidal is ',rtidal,' au,',rtidal*udist/km,' km, or ',rtidal*udist/earthr,' earth radii'
 
     if (np_apophis > 1) then
@@ -174,7 +173,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
 
       ! is speed set here?
        do i=1,npart
-          vxyzu(1:3,i) = vxyz_ptmass(1:3,nptmass)
+          vxyzu(1:3,i) = 0.
        enddo
        massoftype(igas) = m_apophis / npart
        npartoftype(igas) = npart
