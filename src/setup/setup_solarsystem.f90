@@ -18,6 +18,7 @@ module setup
 !   - epoch      : *epoch to query ephemeris, YYYY-MMM-DD HH:MM:SS.fff, blank = today*
 !   - np_apophis : *number of particles used to represent apophis (0=none; 1=sink; n=gas)*
 !   - tmax_in    : *end time of simulation (e.g. 3 days)*
+!   - no_planets : *make apophis the only object simulated, unmoving and centred*
 !
 ! :Dependencies: centreofmass, eos_tillotson, infile_utils, io, kernel,
 !   options, part, physcon, setbinary, setsolarsystem, setup_params,
@@ -28,6 +29,7 @@ module setup
 
  integer :: np_apophis
  logical :: asteroids
+ logical :: no_planets
  character(len=20) :: epoch,tmax_in,dtmax_in
 
  private
@@ -74,6 +76,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  dtmax_in = '1 yr'
  asteroids = .true.
  np_apophis = 0
+ no_planets = .false.
  !call date_and_time(values=values)
  !year = values(1); month = values(2); day = values(3)
  !write(epoch,"(i4.4,'-',i2.2,'-',i2.2)") year,month,day
@@ -134,8 +137,14 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  ! add the planets
  !
  ierr = 0
- call add_sun_and_planets(nptmass,xyzmh_ptmass,vxyz_ptmass,mtot,nerr,epoch)
+ nerr = 0
+ 
+ if (.not. no_planets) then
+   call add_sun_and_planets(nptmass,xyzmh_ptmass,vxyz_ptmass,mtot,nerr,epoch)
+ endif
+ 
  if (nerr > 0) ierr = ierr + nerr
+
  !
  ! add the bringer of death
  !
@@ -151,7 +160,8 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
                             ' g or ',m_apophis*umass/ceresm,' ceres masses'
     print "(a,1pg10.3,a)",' density is ',m_apophis/(4./3.*pi*r_apophis**3)*unit_density,' g/cm^3'
 
-    rtidal = r_apophis*(earthm/umass/m_apophis)**(1./3.)
+    rtidal = 1 
+    ! this is actuall what rtidal should be: r_apophis*(earthm/umass/m_apophis)**(1./3.)
     print "(3(a,1pg10.3),a)",' r_tidal is ',rtidal,' au,',rtidal*udist/km,' km, or ',rtidal*udist/earthr,' earth radii'
 
     if (np_apophis > 1) then
@@ -162,6 +172,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
        call set_sphere('closepacked',id,master,0.,r_apophis,dx,hfact,npart,xyzh,npart_total,&
                        xyz_origin=xyzmh_ptmass(1:3,nptmass),exactN=.true.,np_requested=np_apophis)
 
+      ! is speed set here?
        do i=1,npart
           vxyzu(1:3,i) = vxyz_ptmass(1:3,nptmass)
        enddo
@@ -181,7 +192,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  !
  ! set centre of mass as the origin
  !
- call reset_centreofmass(npart,xyzh,vxyzu,nptmass,xyzmh_ptmass,vxyz_ptmass)
+ !call reset_centreofmass(npart,xyzh,vxyzu,nptmass,xyzmh_ptmass,vxyz_ptmass)
 
  if (ierr /= 0) call fatal('setup','ERRORS during setup')
 
@@ -204,6 +215,7 @@ subroutine write_setupfile(filename)
  call write_inopt(tmax_in,'tmax_in','end time of simulation (e.g. 3 days)',iunit)
  call write_inopt(dtmax_in,'dtmax_in','time between dumps (e.g. 1 hr)',iunit)
  call write_inopt(asteroids,'asteroids','add distant minor bodies as km-sized dust particles',iunit)
+ call write_inopt(no_planets,'no_planets','only contain apophis with no planets or motion',iunit)
  call write_inopt(np_apophis,'np_apophis','number of particles used to represent apophis (0=none; 1=sink; n=gas)',iunit)
  call write_inopt(epoch,'epoch','epoch to query ephemeris, YYYY-MMM-DD HH:MM:SS.fff, blank = today',iunit)
  close(iunit)
@@ -230,6 +242,7 @@ subroutine read_setupfile(filename,ierr)
  call read_inopt(tmax_in, 'tmax_in',db,errcount=nerr)
  call read_inopt(dtmax_in,'dtmax_in',db,errcount=nerr)
  call read_inopt(asteroids,'asteroids',db,errcount=nerr)
+ call read_inopt(no_planets,'no_planets',db,errcount=nerr)
  call read_inopt(np_apophis,'np_apophis',db,min=0,errcount=nerr)
  call read_inopt(epoch,'epoch',db,errcount=nerr)
  call close_db(db)
