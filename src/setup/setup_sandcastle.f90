@@ -46,6 +46,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use mpiutils,     only:reduceall_mpi
  use mpidomain,    only:i_belong
  use viscosity,    only:irealvisc
+ use granular_variables, only:rhos
  use eos,          only:ieos
  use infile_utils, only:get_options,infile_exists
  use units,        only:set_units,udist,unit_density,utime
@@ -70,7 +71,8 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  !
  time        = 0.
  hfact       = hfact_default
- rhozero     = 2.5*g_per_cc/unit_density
+ rhozero     = 3.5*g_per_cc/unit_density
+ rhos        = rhozero ! Set rhos in the equation of state to be the rho zero that is determined here (in code units)
  gamma       = 1
  polyk       = 0.
  iexternalforce = iext_gravity

@@ -46,6 +46,7 @@ subroutine check_setup(nerror,nwarn,restart)
                 kill_particle,shuffle_part,iamtype,iamdust,Bxyz,rad,radprop, &
                 remove_particle_from_npartoftype,ien_type,ien_etotal,gr,eos_vars,itemp
  use eos,             only:gamma,polyk,eos_requires_polyk,ieos_helmholtz
+ use granular_variables, only:rhos
  use centreofmass,    only:get_centreofmass
  use options,         only:ieos,iexternalforce,use_dustfrac,use_hybrid
  use io,              only:id,master
@@ -119,6 +120,12 @@ subroutine check_setup(nerror,nwarn,restart)
     if (gamma <= 0.) then
        if (id==master) print*,'WARNING! gamma not set (should be set > 0 even if not used)'
        nwarn = nwarn + 1
+    endif
+ endif
+ if (ieos==26) then
+    if (rhos < 0.) then
+       if (id==master) print*,'ERROR: when using incompressible EOS  (ieos==26), rhos must be set during setup'
+       nerror = nerror + 1
     endif
  endif
  if (npart < 0) then
