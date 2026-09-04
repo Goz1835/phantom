@@ -52,19 +52,17 @@ end subroutine init_eos_incomp
 !-----------------------------------------------------------------------
 subroutine equationofstate_incomp(rho,pressure,spsound,gamma)
  use granular_variables,    only: rhos,K
- use units,    only:in_code_units
  real, intent(inout) :: rho
  real, intent(out)   :: pressure, spsound, gamma
 
- real :: cgsrhosi
- integer :: ierr
+ real :: rhos_inv
 
  ! Everything has been input in cgs
 
- cgsrhosi = 1 / rhos ! rho s is already in code units, so just need to get the inverse
- pressure = K * (rho * cgsrhosi-1)
- gamma = 1
- spsound = sqrt(K * cgsrhosi)
+ rhos_inv = 1. / rhos ! rho s is already in code units, so just need to get the inverse
+ pressure = K * (rho * rhos_inv-1.)
+ gamma = 1.
+ spsound = sqrt(K * rhos_inv)
 
 end subroutine equationofstate_incomp
 
