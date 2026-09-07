@@ -1451,7 +1451,6 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
           dBx = 0.; dBy = 0.; dBz = 0.; dB2 = 0.
           projBi = 0.; projBj = 0.; divBdiffterm = 0.
        endif
-
        !--get terms required for particle j
        if (usej) then
           hj       = 1./hj1
@@ -1485,10 +1484,14 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              !
              !--calculate j terms (which were precalculated outside loop for i)
              !
-            call get_stress(prj,spsoundj,rhoj,rho1j,xj,yj,zj,pmassj,Bxj,Byj,Bzj, &
-                        pro2j,vwavej, &
-                        sxxj,sxyj,sxzj,syyj,syzj,szzj,visctermisoj,visctermanisoj, &
-                        realviscosity,divvj,bulkvisc,dvdxj,stressmax,radPj)
+            call get_stress(prj,spsoundj,rhoj,rho1j,&
+                        xj,yj,zj, &
+                        pmassj, &
+                        Bxj,Byj,Bzj, &
+                        pro2j, &
+                        vwavej,sxxj,sxyj,sxzj,syyj,syzj,szzj, &
+                        visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxj,stressmax, &
+                        radPj)
 
              mrhoj5   = 0.5*pmassj*rho1j
              autermj  = mrhoj5*alphau
@@ -1510,68 +1513,46 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
             sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.; pro2j = 0.; prj = 0.
             dustfracj = 0.; dustfracjsum = 0.; sqrtrhodustfracj = 0.
           endif
+          if (iamboundary(iamtypej) .and. iamgasi .and. irealvisc==4) then
+            ! rho1j = rho1i; rho21j = rho21i;
+            ! sxxj = sxxi; sxyj = sxyi; sxzj = sxzi; syyj = syyi; syzj = syzi; szzj = szzi
+            call get_stress(pri,spsoundi,rhoi,rho1i, &
+                  xyzh(1,i),xyzh(2,i),xyzh(3,i), &
+                  pmassi, &
+                  Bxi,Byi,Bzi, &
+                  pro2j, &
+                  vwavej,sxxj,sxyj,sxzj,syyj,syzj,szzj, &
+                  visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxi,stressmax, &
+                  radPj)
+          end if
        else ! set to zero terms which are used below without an if (usej)
-          
-         ! Here would be if we are USING j, but j is not gas
-          if(iamboundary(iamtypej) .and. irealvisc == 4) then
-            ! Here, set the stress of j to be the stress of i as per Bui 2021
-            !rhoj      = 0.
-            rho1j     = 0.
-            rho21j    = 0.
+         !rhoj      = 0.
+         rho1j     = 0.
+         rho21j    = 0.
 
-            mrhoj5    = 0.
-            autermj   = 0.
-            avBtermj  = 0.
-            psij = 0.
+         mrhoj5    = 0.
+         autermj   = 0.
+         avBtermj  = 0.
+         psij = 0.
 
-            gradpj    = 0.
-            projsxj   = 0.
-            projsyj   = 0.
-            projszj   = 0.
-            projBj = 0.
-            prj   = 0.
-            pro2j = 0.
-            vwavej = 0.
-            vsigavj = 0.
-            spsoundj = 0.
-            dustfracj = 0.
-            dustfracjsum = 0.
-            sqrtrhodustfracj = 0.
-            dvdxj(:) = 0.
-            sxxj = sxxi; sxyj = sxyi; sxzj = sxzi; syyj = syyi; syzj = syzi; szzj = szzj
-            print*,"Stress in x is: ", sxxj
-          else
-            !rhoj      = 0.
-            rho1j     = 0.
-            rho21j    = 0.
-
-            mrhoj5    = 0.
-            autermj   = 0.
-            avBtermj  = 0.
-            psij = 0.
-
-            gradpj    = 0.
-            projsxj   = 0.
-            projsyj   = 0.
-            projszj   = 0.
-            projBj = 0.
-            prj   = 0.
-            pro2j = 0.
-            vwavej = 0.
-            vsigavj = 0.
-            spsoundj = 0.
-            dustfracj = 0.
-            dustfracjsum = 0.
-            sqrtrhodustfracj = 0.
-            dvdxj(:) = 0.
-            sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.
-          endif
-         
-         
+         gradpj    = 0.
+         projsxj   = 0.
+         projsyj   = 0.
+         projszj   = 0.
+         projBj = 0.
+         prj   = 0.
+         pro2j = 0.
+         vwavej = 0.
+         vsigavj = 0.
+         spsoundj = 0.
+         dustfracj = 0.
+         dustfracjsum = 0.
+         sqrtrhodustfracj = 0.
+         dvdxj(:) = 0.
+         sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.
        endif
 
        ifgas: if (iamgasi .and. iamgasj) then
-
           !
           !--artificial viscosity term
           !
@@ -1882,7 +1863,6 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
                 endif
              enddo
           endif
-
        else !ifgas
           !
           !  gravity between particles of different types, or between gas pairs that are hidden by a sink
@@ -1891,7 +1871,6 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
           fsum(ifyi) = fsum(ifyi) - fgrav*runiy
           fsum(ifzi) = fsum(ifzi) - fgrav*runiz
           fsum(ipot) = fsum(ipot) + pmassj*phii ! no need to symmetrise (see PM07)
-
           !
           ! gas-dust: compute drag terms
           !
