@@ -91,7 +91,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  ! Infile
  !
  if (.not. infile_exists(fileprefix)) then
-    tmax      = 0.2
+    tmax      = 1.2
     dtmax     = 0.005
  endif
  !
