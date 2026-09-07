@@ -922,9 +922,10 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
                           ndrag,nstokes,nsuper,ts_min,ibinnow_m1,ibin_wake,ibin_neighi,&
                           ignoreself,rad,radprop,dens,metrics,apr_level,dt)
  use kernel,      only:grkern,cnormk,radkern2
+ use viscosity,   only:irealvisc
  use part,        only:igas,idust,isink,iohm,ihall,iambi,maxphase,iactive,xyzmh_ptmass,&
                        iamtype,iamdust,get_partinfo,mhd,maxvxyzu,maxdvdx,igasP,ics,iradP,itemp,&
-                       ihsoft
+                       ihsoft, iamboundary
  use dim,         only:maxalpha,maxp,mhd_nonideal,gravity,gr,use_apr,isothermal,use_sinktree,disc_viscosity,track_lum
  use part,        only:rhoh,dvdx,aprmassoftype,shortsinktree
  use nicil,       only:nimhd_get_jcbcb,nimhd_get_dBdt
@@ -945,7 +946,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
  use growth,      only:get_size
  use kernel,      only:wkern,cnormk
 #ifdef IND_TIMESTEPS
- use part,        only:ibin_old,iamboundary
+ use part,        only:ibin_old
  use timestep_ind,only:get_dt
 #endif
  use timestep,    only:bignumber,overcleanfac
@@ -1484,7 +1485,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              !
              !--calculate j terms (which were precalculated outside loop for i)
              !
-             call get_stress(prj,spsoundj,rhoj,rho1j,xj,yj,zj,pmassj,Bxj,Byj,Bzj, &
+            call get_stress(prj,spsoundj,rhoj,rho1j,xj,yj,zj,pmassj,Bxj,Byj,Bzj, &
                         pro2j,vwavej, &
                         sxxj,sxyj,sxzj,syyj,syzj,szzj,visctermisoj,visctermanisoj, &
                         realviscosity,divvj,bulkvisc,dvdxj,stressmax,radPj)
@@ -1503,37 +1504,70 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              endif
              if (vsigj > vsigmax) vsigmax = vsigj
           else
-             vsigj = max(-projv,0.)
-             if (vsigj > vsigmax) vsigmax = vsigj
-             vsigavj = 0.; vwavej = 0.; avBtermj = 0.; autermj = 0. ! avoid compiler warnings
-             sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.; pro2j = 0.; prj = 0.
-             dustfracj = 0.; dustfracjsum = 0.; sqrtrhodustfracj = 0.
+            vsigj = max(-projv,0.)
+            if (vsigj > vsigmax) vsigmax = vsigj
+            vsigavj = 0.; vwavej = 0.; avBtermj = 0.; autermj = 0. ! avoid compiler warnings
+            sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.; pro2j = 0.; prj = 0.
+            dustfracj = 0.; dustfracjsum = 0.; sqrtrhodustfracj = 0.
           endif
        else ! set to zero terms which are used below without an if (usej)
-          !rhoj      = 0.
-          rho1j     = 0.
-          rho21j    = 0.
+          
+         ! Here would be if we are USING j, but j is not gas
+          if(iamboundary(iamtypej) .and. irealvisc == 4) then
+            ! Here, set the stress of j to be the stress of i as per Bui 2021
+            !rhoj      = 0.
+            rho1j     = 0.
+            rho21j    = 0.
 
-          mrhoj5    = 0.
-          autermj   = 0.
-          avBtermj  = 0.
-          psij = 0.
+            mrhoj5    = 0.
+            autermj   = 0.
+            avBtermj  = 0.
+            psij = 0.
 
-          gradpj    = 0.
-          projsxj   = 0.
-          projsyj   = 0.
-          projszj   = 0.
-          projBj = 0.
-          prj   = 0.
-          pro2j = 0.
-          vwavej = 0.
-          vsigavj = 0.
-          spsoundj = 0.
-          dustfracj = 0.
-          dustfracjsum = 0.
-          sqrtrhodustfracj = 0.
-          dvdxj(:) = 0.
-          sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.
+            gradpj    = 0.
+            projsxj   = 0.
+            projsyj   = 0.
+            projszj   = 0.
+            projBj = 0.
+            prj   = 0.
+            pro2j = 0.
+            vwavej = 0.
+            vsigavj = 0.
+            spsoundj = 0.
+            dustfracj = 0.
+            dustfracjsum = 0.
+            sqrtrhodustfracj = 0.
+            dvdxj(:) = 0.
+            sxxj = sxxi; sxyj = sxyi; sxzj = sxzi; syyj = syyi; syzj = syzi; szzj = szzj
+            print*,"Stress in x is: ", sxxj
+          else
+            !rhoj      = 0.
+            rho1j     = 0.
+            rho21j    = 0.
+
+            mrhoj5    = 0.
+            autermj   = 0.
+            avBtermj  = 0.
+            psij = 0.
+
+            gradpj    = 0.
+            projsxj   = 0.
+            projsyj   = 0.
+            projszj   = 0.
+            projBj = 0.
+            prj   = 0.
+            pro2j = 0.
+            vwavej = 0.
+            vsigavj = 0.
+            spsoundj = 0.
+            dustfracj = 0.
+            dustfracjsum = 0.
+            sqrtrhodustfracj = 0.
+            dvdxj(:) = 0.
+            sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.
+          endif
+         
+         
        endif
 
        ifgas: if (iamgasi .and. iamgasj) then
