@@ -24,7 +24,7 @@ module setup
 
  private
  !--private module variables
- integer :: npartb, nparts, nlayers
+ integer :: nparts, nlayers
  real    :: boxsize, height, radius
 
 contains
@@ -84,7 +84,6 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  !
  boxsize     = 10.*metre/udist
  nparts      = 40
- npartb      = 80
  height      = 5.0*metre/udist
  radius      = 1.0*metre/udist
  nlayers     = 3
@@ -103,11 +102,31 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  call get_options(trim(fileprefix)//'.setup',id==master,ierr,&
                   read_setupfile,write_setupfile)
  if (ierr /= 0) stop 'rerun phantomsetup after editing .setup file'
- deltab= 2*boxsize/npartb
- deltas = 2*boxsize/nparts
+ deltas = 2*radius/nparts
+ 
  !
- ! Put particles on grid
+ ! making sandcastle
  !
+ call set_unifdis('cubic',id,master,-radius,radius,&
+                  -radius,radius,0.0,height,&
+                  deltas,hfact,npart,xyzh,periodic,mask=i_belong, rcylmin=0.0, rcylmax=radius)
+   
+ !
+ ! Finalise particle properties
+ !
+ npartoftype(igas) = npart
+ totmass           = rhozero*(pi*radius**2*height)
+ massoftype(igas)      = totmass/reduceall_mpi('+',npartoftype(igas))
+ if (id==master) print*,' gas particle mass = ',massoftype(igas)
+
+ do i=1,npart
+   vxyzu(:,i) = 0.
+   call set_particle_type(i,igas)
+enddo
+ !
+ ! making boundary
+ !
+ deltab = deltas
  call set_unifdis('cubic',id,master,-0.5*boxsize,0.5*boxsize,&
                   -0.5*boxsize,0.5*boxsize,-nlayers*deltab,0.0,&
                   deltab,hfact,npart,xyzh,periodic,mask=i_belong)
@@ -115,35 +134,17 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  ! Finalise particle properties
  !
  npartoftype(:)    = 0
- npartoftype(iboundary) = npart
+ npartoftype(iboundary) = npart-npartoftype(igas)
  totmass           = rhozero*(boxsize*boxsize*nlayers*deltab)
  massoftype(iboundary)        = totmass/reduceall_mpi('+',npartoftype(iboundary))
  if (id==master) print*,' boundary particle mass = ',massoftype(iboundary)
 
- do i=1,npart
+ do i=npartoftype(igas)+1,npart
     vxyzu(:,i) = 0.
     call set_particle_type(i,iboundary)
  enddo
 
- !
- ! making sandcastle
- !
- call set_unifdis('closepacked',id,master,-radius,radius,&
-                  -radius,radius,0.0,height,&
-                  deltas,hfact,npart,xyzh,periodic,mask=i_belong, rcylmin=0.0, rcylmax=radius)
 
- !
- ! Finalise particle properties
- !
- npartoftype(igas) = npart-npartoftype(iboundary)
- totmass           = rhozero*(3.14159*radius**2*height)
- massoftype(igas)      = totmass/reduceall_mpi('+',npartoftype(igas))
- if (id==master) print*,' gas particle mass = ',massoftype(igas)
-
- do i=npartoftype(iboundary)+1,npart
-   vxyzu(:,i) = 0.
-   call set_particle_type(i,igas)
-enddo
 
  rhos = rhozero
 
@@ -162,7 +163,6 @@ subroutine write_setupfile(filename)
  print "(a)",' writing setup options file '//trim(filename)
  open(unit=iunit,file=filename,status='replace',form='formatted')
  write(iunit,"(a)") '# input file for Sandcastle setup routine'
- call write_inopt(npartb, 'npartb' ,'number of particles in x-direction for boundary',iunit)
  call write_inopt(nparts, 'nparts' ,'number of particles in x-direction for sandcastle',iunit)
  call write_inopt(boxsize,'boxsize','size of the box'   ,iunit)
  call write_inopt(height,'height','height of sandcastle',iunit)
@@ -187,7 +187,6 @@ subroutine read_setupfile(filename,ierr)
  nerr = 0
  print "(a)",' reading setup options from '//trim(filename)
  call open_db_from_file(db,filename,iunit,ierr)
- call read_inopt(npartb ,'npartb' ,db,min=8,errcount=nerr)
  call read_inopt(nparts ,'nparts' ,db,min=8,errcount=nerr)
  call read_inopt(boxsize,'boxsize',db,min=0.,errcount=nerr)
  call read_inopt(radius,'radius',db,min=0.,max=boxsize,errcount=nerr)
