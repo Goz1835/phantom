@@ -24,7 +24,7 @@ module setup
 
  private
  !--private module variables
- integer :: npartb, nparts, nlayers
+ integer :: npartx, nlayers
  real    :: boxsize, height, radius
 
 contains
@@ -61,7 +61,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  real,              intent(inout) :: time
  character(len=20), intent(in)    :: fileprefix
  real,              intent(out)   :: vxyzu(:,:)
- real                             :: deltab,deltas,totmass
+ real                             :: deltax,totmass
  integer                          :: i,ierr
  character(len=12)                :: elasticbulkmodulus,granulardensity
 
@@ -91,11 +91,10 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  ! Default setup parameters
  !
  boxsize     = 10.*metre/udist
- nparts      = 40
- npartb      = 80
+ npartx      = 40
  height      = 5.0*metre/udist
- radius      = 1.0*metre/udist
- nlayers     = 3
+ radius       = 1.0*metre/udist
+ nlayers       = 3
  !
  ! Infile
  !
@@ -111,20 +110,19 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  call get_options(trim(fileprefix)//'.setup',id==master,ierr,&
                   read_setupfile,write_setupfile)
  if (ierr /= 0) stop 'rerun phantomsetup after editing .setup file'
- deltab= 2*boxsize/npartb
- deltas = 2*boxsize/nparts
+ deltax = 2*boxsize/npartx
  !
  ! Put particles on grid
  !
  call set_unifdis('cubic',id,master,-0.5*boxsize,0.5*boxsize,&
-                  -0.5*boxsize,0.5*boxsize,-nlayers*deltab,0.0,&
-                  deltab,hfact,npart,xyzh,periodic,mask=i_belong)
+                  -0.5*boxsize,0.5*boxsize,-nlayers*deltax,0.0,&
+                  deltax,hfact,npart,xyzh,periodic,mask=i_belong)
  !
  ! Finalise particle properties
  !
  npartoftype(:)    = 0
  npartoftype(iboundary) = npart
- totmass           = rhozero*(boxsize*boxsize*nlayers*deltab)
+ totmass           = rhozero*(boxsize*boxsize*nlayers*deltax)
  massoftype(iboundary)        = totmass/reduceall_mpi('+',npartoftype(iboundary))
  if (id==master) print*,' boundary particle mass = ',massoftype(iboundary)
 
@@ -138,7 +136,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  !
  call set_unifdis('closepacked',id,master,-radius,radius,&
                   -radius,radius,0.0,height,&
-                  deltas,hfact,npart,xyzh,periodic,mask=i_belong, rcylmin=0.0, rcylmax=radius)
+                  deltax,hfact,npart,xyzh,periodic,mask=i_belong, rcylmin=0.0, rcylmax=radius)
 
  !
  ! Finalise particle properties
@@ -170,8 +168,7 @@ subroutine write_setupfile(filename)
  print "(a)",' writing setup options file '//trim(filename)
  open(unit=iunit,file=filename,status='replace',form='formatted')
  write(iunit,"(a)") '# input file for Sandcastle setup routine'
- call write_inopt(npartb, 'npartb' ,'number of particles in x-direction for boundary',iunit)
- call write_inopt(nparts, 'nparts' ,'number of particles in x-direction for sandcastle',iunit)
+ call write_inopt(npartx, 'npartx' ,'number of particles in x-direction',iunit)
  call write_inopt(boxsize,'boxsize','size of the box'   ,iunit)
  call write_inopt(height,'height','height of sandcastle',iunit)
  call write_inopt(radius,'radius','radius of sandcastle',iunit)
@@ -195,8 +192,7 @@ subroutine read_setupfile(filename,ierr)
  nerr = 0
  print "(a)",' reading setup options from '//trim(filename)
  call open_db_from_file(db,filename,iunit,ierr)
- call read_inopt(npartb ,'npartb' ,db,min=8,errcount=nerr)
- call read_inopt(nparts ,'nparts' ,db,min=8,errcount=nerr)
+ call read_inopt(npartx ,'npartx' ,db,min=8,errcount=nerr)
  call read_inopt(boxsize,'boxsize',db,min=0.,errcount=nerr)
  call read_inopt(radius,'radius',db,min=0.,max=boxsize,errcount=nerr)
  call read_inopt(height,'height',db,min=0.,max=boxsize,errcount=nerr)
