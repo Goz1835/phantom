@@ -28,7 +28,7 @@ module ptmass
 !   - h_soft_sinkgas  : *softening length for new sink particles*
 !   - h_soft_sinksink : *softening length between sink particles*
 !   - icreate_sinks   : *allow automatic sink particle creation*
-!   - isink_potential : *sink potential (0=1/r,1=surf)*
+!   - isink_potential : *sink potential (0=1/r,1=Ayliffe&Bate,2=robust surface)*
 !   - r_crit          : *critical radius for point mass creation (no new sinks < r_crit from existing sink)*
 !   - r_merge_cond    : *sinks will merge if bound within this radius*
 !   - r_merge_uncond  : *sinks will unconditionally merge within this separation*
@@ -176,7 +176,7 @@ subroutine get_accel_sink_gas(nptmass,xi,yi,zi,hi,xyzmh_ptmass,fxi,fyi,fzi,phi, 
  real                             :: ftmpxi,ftmpyi,ftmpzi
  real                             :: dx,dy,dz,rr2,ddr,dr3,f1,f2,pmassj,J2,shat(3),Rsink
  real                             :: hsoft,hsoft1,hsoft21,q2i,qi,psoft,fsoft
- real                             :: fxj,fyj,fzj,dsx,dsy,dsz,fac,r
+ real                             :: fxj,fyj,fzj,dsx,dsy,dsz
  integer                          :: j
  logical                          :: tofrom,extrap,pert_on_subg
  !
@@ -263,19 +263,7 @@ subroutine get_accel_sink_gas(nptmass,xi,yi,zi,hi,xyzmh_ptmass,fxi,fyi,fzi,phi, 
        if (tofrom) f2 = pmassi*dr3
 
        ! modified potential
-       select case (isink_potential)
-       case(1)
-          ! Ayliffe & Bate (2010) equation 2 (prevent accretion on to sink)
-          Rsink = xyzmh_ptmass(iReff,j)
-          r=1./ddr
-          if (Rsink > 0. .and. r < 2*Rsink) then
-             fac = (1. - (2. - r/Rsink)**4)
-             f1 = f1*fac
-             f2 = f2*fac
-             phi = phi - pmassj*(r**3/3.-4.*r**2*Rsink+24.*r*Rsink**2 &
-                  -16.*Rsink**4/r-32.*Rsink**3*log(r))/Rsink**4
-          endif
-       end select
+       if (isink_potential==1) call get_surface_force(xyzmh_ptmass(iReff,j),pmassj,ddr,phi,f1,f2)
 
        ftmpxi = ftmpxi - dx*f1
        ftmpyi = ftmpyi - dy*f1
@@ -355,6 +343,7 @@ subroutine get_accel_sink_sink(nptmass,xyzmh_ptmass,fxyz_ptmass,phitot,dtsinksin
                           fgr_ptmass
  use extern_gr,      only:get_grforce
  use timestep,       only:C_force,bignumber,dtf_gr_ptmass_min
+ use dem,            only:get_ssdem_force
  integer, intent(in)  :: nptmass
  integer, intent(in)  :: iexternalforce
  real,    intent(in)  :: xyzmh_ptmass(nsinkproperties,nptmass)
@@ -421,7 +410,7 @@ subroutine get_accel_sink_sink(nptmass,xyzmh_ptmass,fxyz_ptmass,phitot,dtsinksin
  !$omp parallel do default(none) &
  !$omp shared(nptmass,xyzmh_ptmass,fxyz_ptmass,merge_ij,r_merge2,dsdt_ptmass) &
  !$omp shared(iexternalforce,ti,h_soft_sinksink,potensoft0,hsoft1,hsoft21) &
- !$omp shared(extrapfac,extrap,fsink_old,h_acc,icreate_sinks,use_sinktree) &
+ !$omp shared(extrapfac,extrap,fsink_old,h_acc,icreate_sinks,isink_potential,use_sinktree) &
  !$omp shared(group_info,bin_info,use_regnbody,shortsinktree) &
  !$omp shared(vxyz_ptmass,metrics_ptmass,metricderivs_ptmass,calc_gr) &
  !$omp shared(fgr_ptmass,do_recompute_gr) &
@@ -518,14 +507,20 @@ subroutine get_accel_sink_sink(nptmass,xyzmh_ptmass,fxyz_ptmass,phitot,dtsinksin
        else
           ! no softening on the sink-sink interaction
           dr3   = ddr*ddr*ddr
+          f1    = pmassj*dr3
+
+          if (isink_potential==1) call get_surface_force(xyzmh_ptmass(iReff,j),pmassj,ddr,phii,f1)
 
           ! acceleration of sink1 from sink2
-          f1    = pmassj*dr3
           fxi   = fxi - dx*f1
           fyi   = fyi - dy*f1
           fzi   = fzi - dz*f1
           pterm = -ddr
           phii  = phii + pmassj*pterm    ! potential (GM/r)
+
+          if (isink_potential==2) call get_ssdem_force(xyzmh_ptmass(iReff,i),xyzmh_ptmass(iReff,j),&
+                                       pmassi,pmassj,ddr,dx,dy,dz,fxi,fyi,fzi,vxyz_ptmass(1:3,i),vxyz_ptmass(1:3,j),&
+                                       xyzmh_ptmass(ispinx:ispinz,i),xyzmh_ptmass(ispinx:ispinz,j),dtsinksink)
 
           ! additional acceleration due to oblateness of sink particles j and i
           if (abs(J2j) > 0.) then
@@ -2497,7 +2492,6 @@ subroutine pt_write_sinkev(nptmass,time,xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,fxy
  integer, intent(in) :: nptmass
  real,    intent(in) :: time, xyzmh_ptmass(:,:),vxyz_ptmass(:,:),fxyz_ptmass(:,:),fxyz_ptmass_sinksink(:,:)
  integer             :: i,iunit
-
  if (id /= master) return ! only do this on master thread
 
  iunit = iskfile
@@ -2593,10 +2587,18 @@ subroutine write_options_ptmass(iunit)
  use infile_utils, only:write_inopt
  use subgroup,     only:r_neigh
  use dim,          only:use_sinktree
+ use dem,          only:kn_cgs,epsilon_n_dem,ct_dem,kt_cgs,coh_gap_max_cgs
  integer, intent(in) :: iunit
 
  write(iunit,"(/,a)") '# options controlling sink particles'
- call write_inopt(isink_potential,'isink_potential','sink potential (0=1/r,1=surf)',iunit)
+ call write_inopt(isink_potential,'isink_potential','sink potential (0=1/r,1=surf,2=dem)',iunit)
+ if (isink_potential == 2) then
+    call write_inopt(kn_cgs,'kn_cgs','DEM normal spring constant (g/s^2 per cm overlap)',iunit)
+    call write_inopt(epsilon_n_dem,'epsilon_n_dem','DEM normal coefficient of restitution [0=inelastic,1=elastic]',iunit)
+    call write_inopt(ct_dem,'ct_dem','DEM tangential damping coefficient',iunit)
+    call write_inopt(kt_cgs,'kt_cgs','DEM tensile spring constant (g/s^2 per cm gap; 0=off)',iunit)
+    call write_inopt(coh_gap_max_cgs,'coh_gap_max_cgs','max surface gap for DEM bond (cm; 0=1% of R_i+R_j)',iunit)
+ endif
  if (gravity) then
     call write_inopt(icreate_sinks,'icreate_sinks','allow automatic sink particle creation',iunit)
     if (icreate_sinks > 0) then
@@ -2644,12 +2646,18 @@ subroutine read_options_ptmass(db,nerr)
  use subgroup,     only:r_neigh
  use dim,          only:use_sinktree
  use infile_utils, only:inopts,read_inopt
+ use dem,          only:kn_cgs,epsilon_n_dem,ct_dem,kt_cgs,coh_gap_max_cgs,dem_cohesion_summary
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
  character(len=*), parameter :: label = 'read_infile'
 
  call read_inopt(icreate_sinks,'icreate_sinks',db,errcount=nerr,min=0,max=2,default=icreate_sinks)
- call read_inopt(isink_potential,'isink_potential',db,errcount=nerr,min=0,max=1,default=isink_potential)
+ call read_inopt(isink_potential,'isink_potential',db,errcount=nerr,min=0,max=2,default=isink_potential)
+ call read_inopt(kn_cgs,'kn_cgs',db,errcount=nerr,min=0.,default=kn_cgs)
+ call read_inopt(epsilon_n_dem,'epsilon_n_dem',db,errcount=nerr,min=0.,max=1.,default=epsilon_n_dem)
+ call read_inopt(ct_dem,'ct_dem',db,errcount=nerr,min=0.,default=ct_dem)
+ call read_inopt(kt_cgs,'kt_cgs',db,errcount=nerr,min=0.,default=kt_cgs)
+ call read_inopt(coh_gap_max_cgs,'coh_gap_max_cgs',db,errcount=nerr,min=0.,default=coh_gap_max_cgs)
  call read_inopt(rho_crit_cgs,'rho_crit_cgs',db,errcount=nerr,min=0.,default=rho_crit_cgs)
  call read_inopt(r_crit,'r_crit',db,errcount=nerr,min=0.,default=r_crit)
  call read_inopt(h_acc,'h_acc',db,errcount=nerr,min=0.,default=h_acc)
@@ -2674,6 +2682,8 @@ subroutine read_options_ptmass(db,nerr)
  if (f_crit_override > 0.) l_crit_override = .true.
 
  if (icreate_sinks==1 .and. r_merge_uncond < 2.0*h_acc) call warning(label,'Strongly suggest r_merge_uncond >= 2.0*h_acc')
+
+ if (isink_potential == 2) call dem_cohesion_summary
 
 end subroutine read_options_ptmass
 
@@ -2703,5 +2713,31 @@ subroutine get_pressure_on_sinks(nptmass,xyzmh_ptmass)
  enddo
 
 end subroutine get_pressure_on_sinks
+
+!----------------------------------------------------------------
+!+
+!  Calculate surface force modification for sink particles
+!  Implements Ayliffe & Bate (2010) equation 2 to prevent accretion onto sink
+!+
+!----------------------------------------------------------------
+subroutine get_surface_force(Rsink,pmassj,ddr,phi,f1,f2)
+ real, intent(in)    :: Rsink,pmassj,ddr
+ real, intent(inout) :: phi,f1
+ real, intent(inout), optional :: f2
+ real :: r,fac
+
+ if (Rsink > 0.) then
+    r = 1./ddr
+    if (r < 2*Rsink) then
+       ! Ayliffe & Bate (2010) equation 2 (prevent accretion on to sink)
+       fac = (1. - (2. - r/Rsink)**4)
+       f1 = f1*fac
+       if (present(f2)) f2 = f2*fac
+       phi = phi - pmassj*(r**3/3.-4.*r**2*Rsink+24.*r*Rsink**2 &
+            -16.*Rsink**4/r-32.*Rsink**3*log(r))/Rsink**4
+    endif
+ endif
+
+end subroutine get_surface_force
 
 end module ptmass

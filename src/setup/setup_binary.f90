@@ -65,7 +65,9 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,&
  use setunits,       only:mass_unit,dist_unit
  use physcon,        only:deg_to_rad
  use kernel,         only:hfact_default
+ use units,          only:in_code_units
  use infile_utils,   only:get_options,infile_exists
+ use ptmass,         only:isink_potential
  use timestep,       only:tmax,dtmax
  integer,           intent(in)    :: id
  integer,           intent(inout) :: npart
@@ -196,6 +198,20 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,&
     xyzmh_ptmass(ispinz,1) = cos(angle)
     xyzmh_ptmass(iReff,1) = xyzmh_ptmass(ihacc,1)
  endif
+ isink_potential = 2
+ xyzmh_ptmass(iReff,1) = 0.1
+ xyzmh_ptmass(iReff,2) = 0.1
+
+ nptmass = nptmass + 1
+ xyzmh_ptmass(:,nptmass) = xyzmh_ptmass(:,1)
+ xyzmh_ptmass(1,nptmass) = xyzmh_ptmass(1,1) - 0.125
+ xyzmh_ptmass(2,nptmass) = xyzmh_ptmass(2,1) + 0.25
+
+ nptmass = nptmass + 1
+ xyzmh_ptmass(:,nptmass) = xyzmh_ptmass(:,1)
+ xyzmh_ptmass(1,nptmass) = xyzmh_ptmass(1,1) - 0.125
+ xyzmh_ptmass(2,nptmass) = xyzmh_ptmass(2,1) - 0.25
+ vxyz_ptmass(:,nptmass) = 0.
 
  alphau = min(0.1,alphau)
  if (.not.infile_exists(fileprefix) .and. nstar == 2) then

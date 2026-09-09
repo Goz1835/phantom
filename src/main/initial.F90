@@ -612,7 +612,7 @@ subroutine initialise_sink_particle_forces(time,dtextforce,dtsinkgas,logfile,ier
        endif
        call get_accel_sink_sink(nptmass,xyzmh_ptmass,fxyz_ptmass,epot_sinksink,dtsinksink,&
                                iexternalforce,time,merge_ij,merge_n,dsdt_ptmass,&
-                               group_info,bin_info)
+                               group_info,bin_info,vxyz_ptmass=vxyz_ptmass)
     endif
 
     if (gr) then
