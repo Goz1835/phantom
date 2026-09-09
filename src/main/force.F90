@@ -1524,11 +1524,11 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
             ! sxxj = sxxi; sxyj = sxyi; sxzj = sxzi; syyj = syyi; syzj = syzi; szzj = szzi
             call get_stress(pri,spsoundi,rhoi,rho1i, &
                   xyzh(1,i),xyzh(2,i),xyzh(3,i), &
-                  pmassj, &
+                  pmassi, &
                   Bxi,Byi,Bzi, &
                   pro2j, &
                   vwavej,sxxj,sxyj,sxzj,syyj,syzj,szzj, &
-                  visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxj,stressmax, &
+                  visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxi,stressmax, &
                   radPj)
           end if
        else ! set to zero terms which are used below without an if (usej)
