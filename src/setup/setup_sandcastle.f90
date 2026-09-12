@@ -24,7 +24,7 @@ module setup
 
  private
  !--private module variables
- integer :: npartx, nlayers
+ integer :: nparts, nlayers
  real    :: boxsize, height, radius
 
 contains
@@ -91,7 +91,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  ! Default setup parameters
  !
  boxsize     = 10.*metre/udist
- npartx      = 40
+ nparts      = 40
  height      = 5.0*metre/udist
  radius       = 1.0*metre/udist
  nlayers       = 3
@@ -110,7 +110,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  call get_options(trim(fileprefix)//'.setup',id==master,ierr,&
                   read_setupfile,write_setupfile)
  if (ierr /= 0) stop 'rerun phantomsetup after editing .setup file'
- deltax = 2*boxsize/npartx
+ deltas = 2*radius/nparts
  !
  ! Put particles on grid
  !
@@ -122,7 +122,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  !
  npartoftype(:)    = 0
  npartoftype(iboundary) = npart
- totmass           = rhozero*(boxsize*boxsize*nlayers*deltax)
+ totmass           = rhozero*(boxsize*boxsize*nlayers*deltab)
  massoftype(iboundary)        = totmass/reduceall_mpi('+',npartoftype(iboundary))
  if (id==master) print*,' boundary particle mass = ',massoftype(iboundary)
 
@@ -136,7 +136,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  !
  call set_unifdis('closepacked',id,master,-radius,radius,&
                   -radius,radius,0.0,height,&
-                  deltax,hfact,npart,xyzh,periodic,mask=i_belong, rcylmin=0.0, rcylmax=radius)
+                  deltas,hfact,npart,xyzh,periodic,mask=i_belong, rcylmin=0.0, rcylmax=radius)
 
  !
  ! Finalise particle properties
@@ -168,7 +168,7 @@ subroutine write_setupfile(filename)
  print "(a)",' writing setup options file '//trim(filename)
  open(unit=iunit,file=filename,status='replace',form='formatted')
  write(iunit,"(a)") '# input file for Sandcastle setup routine'
- call write_inopt(npartx, 'npartx' ,'number of particles in x-direction',iunit)
+ call write_inopt(nparts, 'nparts' ,'number of particles in x-direction for sandcastle',iunit)
  call write_inopt(boxsize,'boxsize','size of the box'   ,iunit)
  call write_inopt(height,'height','height of sandcastle',iunit)
  call write_inopt(radius,'radius','radius of sandcastle',iunit)
@@ -192,7 +192,7 @@ subroutine read_setupfile(filename,ierr)
  nerr = 0
  print "(a)",' reading setup options from '//trim(filename)
  call open_db_from_file(db,filename,iunit,ierr)
- call read_inopt(npartx ,'npartx' ,db,min=8,errcount=nerr)
+ call read_inopt(nparts ,'nparts' ,db,min=8,errcount=nerr)
  call read_inopt(boxsize,'boxsize',db,min=0.,errcount=nerr)
  call read_inopt(radius,'radius',db,min=0.,max=boxsize,errcount=nerr)
  call read_inopt(height,'height',db,min=0.,max=boxsize,errcount=nerr)

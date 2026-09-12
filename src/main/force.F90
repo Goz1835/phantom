@@ -1516,6 +1516,21 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
             sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.; pro2j = 0.; prj = 0.
             dustfracj = 0.; dustfracjsum = 0.; sqrtrhodustfracj = 0.
           endif
+<<<<<<< HEAD
+=======
+          if (iamboundary(iamtypej) .and. iamgasi .and. irealvisc==4) then
+            ! rho1j = rho1i; rho21j = rho21i;
+            ! sxxj = sxxi; sxyj = sxyi; sxzj = sxzi; syyj = syyi; syzj = syzi; szzj = szzi
+            call get_stress(pri,spsoundi,rhoi,rho1i, &
+                  xyzh(1,i),xyzh(2,i),xyzh(3,i), &
+                  pmassi, &
+                  Bxi,Byi,Bzi, &
+                  pro2j, &
+                  vwavej,sxxj,sxyj,sxzj,syyj,syzj,szzj, &
+                  visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxi,stressmax, &
+                  radPj)
+          end if
+>>>>>>> parent of 509dbae5a (Changes to npart for sandcastle boundary mass calcs, changes to j indexes for boundary force calcs)
        else ! set to zero terms which are used below without an if (usej)
           
          ! Here would be if we are USING j, but j is not gas
