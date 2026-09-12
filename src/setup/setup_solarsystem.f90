@@ -19,6 +19,7 @@ module setup
 !   - np_apophis : *number of particles used to represent apophis (0=none; 1=sink; n=gas)*
 !   - use_granular : *set ieos=26 and irealvisc=4 to simulate apophis using granular flow
 !   - apophis_rho : *reference density for apophis for the incompressible eos
+!   - apophis_K : *reference bulk density for apophis for the incompressible eos
 !   - tmax_in    : *end time of simulation (e.g. 3 days)*
 !   - scale_pos  : *scaling factor for apophis initial position (heliocentric)*
 !   - scale_earth_sep : *scale geocentric Earth–Apophis separation (1=ephemeris; requires apophis_only=F)*
@@ -39,9 +40,9 @@ module setup
  character(len=20) :: epoch,tmax_in,dtmax_in
  logical :: use_dem,apophis_only
  character(len=256) :: apophis_shape_file
-
+ 
  logical :: use_granular
- real :: apophis_rho, apophis_K
+ character(len=12) :: apophis_K, apophis_rho
 
  real :: scale_vel
  real :: scale_pos
@@ -107,9 +108,9 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
 
  use_granular = .true.
  ! the density value is in g/cm^3
- apophis_rho = 3.5
+ apophis_rho = "2.5*g/cm^3"
  ! The K value is in kpa
- apophis_K = 101. 
+ apophis_K = "101.*kpa"
 
 
  use_dem = .false.
@@ -242,7 +243,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
     ! determine mass of apophis based on the relevant density for the eos.
     ! assume it follows tillotson if not otherwise defined
     if(ieos == 26 .or. use_granular) then
-      m_apophis = 4./3.*pi*(rhos*scale_rho/unit_density)*r_apophis**3
+      m_apophis = 4./3.*pi*(rhos*scale_rho)*r_apophis**3
     else
       m_apophis = 4./3.*pi*(rho_0*scale_rho/unit_density)*r_apophis**3
     endif
@@ -692,7 +693,8 @@ subroutine write_setupfile(filename)
  call write_inopt(epoch,'epoch','epoch to query ephemeris, YYYY-MMM-DD HH:MM:SS.fff, blank = today',iunit)
 
  call write_inopt(use_granular,'use_granular','simulate apophis as rubble using granular flow',iunit)
- call write_inopt(apophis_rho,'apophis_rho','density of apophis for the incomp eos (in g/cm^3)',iunit)
+ call write_inopt(apophis_rho,'apophis_rho','density of apophis for the incomp eos (code units or e.g 2.5*gm/cm^3)',iunit)
+ call write_inopt(apophis_K,'apophis_K','bulk density of apophis for the incomp eos (code units or e.g 101.*kpa)',iunit)
 
  call write_inopt(use_dem,'use_dem','use the discrete element method for sink-sink interactions',iunit)
  call write_inopt(apophis_only,'apophis_only','only add apophis',iunit)
@@ -741,6 +743,7 @@ subroutine read_setupfile(filename,ierr)
 
  call read_inopt(use_granular,'use_granular',db,errcount=nerr)
  call read_inopt(apophis_rho,'apophis_rho',db,errcount=nerr)
+ call read_inopt(apophis_K,'apophis_K',db,errcount=nerr)
 
  call read_inopt(use_dem,'use_dem',db,errcount=nerr)
  call read_inopt(apophis_only,'apophis_only',db,errcount=nerr)
