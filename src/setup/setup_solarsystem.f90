@@ -17,6 +17,8 @@ module setup
 !   - dtmax_in   : *time between dumps (e.g. 1 hr)*
 !   - epoch      : *epoch to query ephemeris, YYYY-MMM-DD HH:MM:SS.fff, blank = today*
 !   - np_apophis : *number of particles used to represent apophis (0=none; 1=sink; n=gas)*
+!   - use_granular : *set ieos=26 and irealvisc=4 to simulate apophis using granular flow
+!   - apophis_rho : *reference density for apophis for the incompressible eos
 !   - tmax_in    : *end time of simulation (e.g. 3 days)*
 !   - scale_pos  : *scaling factor for apophis initial position (heliocentric)*
 !   - scale_earth_sep : *scale geocentric Earth–Apophis separation (1=ephemeris; requires apophis_only=F)*
@@ -36,7 +38,10 @@ module setup
  logical :: asteroids
  character(len=20) :: epoch,tmax_in,dtmax_in
  logical :: use_dem,apophis_only
-character(len=256) :: apophis_shape_file
+ character(len=256) :: apophis_shape_file
+
+ logical :: use_granular
+ real :: apophis_rho, apophis_K
 
  real :: scale_vel
  real :: scale_pos
@@ -68,9 +73,9 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use kernel,        only:hfact_default
  use eos_tillotson, only:rho_0,A
  use eos,           only:ieos
- !use options,       only:ieos
+ use granular_variables,    only:set_reference_density_cgs, rhos, K, set_granular_K_kpa
  use shape,         only:set_shape
- use options,       only:ieos
+ !use options,       only:ieos
  use setup_params,  only:npart_total
  use orbits,        only:get_pericentre_distance,get_eccentricity
  use infile_utils,  only:get_options
@@ -95,14 +100,20 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
 !
 ! default runtime parameters
 !
- tmax_in = '1000 yr'
- dtmax_in = '1 yr'
- asteroids = .true.
- np_apophis = 0
- irealvisc = 4
+ tmax_in = '8 days'
+ dtmax_in = '1 hr'
+ asteroids = .false.
+ np_apophis = 10000
+
+ use_granular = .true.
+ ! the density value is in g/cm^3
+ apophis_rho = 3.5
+ ! The K value is in kpa
+ apophis_K = 101. 
+
 
  use_dem = .false.
- apophis_only = .false.
+ apophis_only = .true.
  add_mars_moons = .false.
  !call date_and_time(values=values)
  !year = values(1); month = values(2); day = values(3)
@@ -181,6 +192,19 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
     vxyz_ptmass(:,1:nptmass) = 0.
     nptmass = 0
  endif
+
+ !
+ ! Set the granular settings
+ !
+ if(use_granular) then
+    irealvisc = 4
+    ieos = 26
+
+    ! set the values for the eos
+    call set_reference_density_cgs(apophis_rho)
+    call set_granular_K_kpa(apophis_K)
+ endif
+
  !
  ! torque-align spin axis needs Earth; fall back to apophis_spin_axis
  ! when apophis_only removes Earth from the sink list
@@ -214,8 +238,15 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
     r_apophis = xyzmh_ptmass(5,nptmass) * scale_r_apophis
     xyzmh_ptmass(5,nptmass) = r_apophis
     print "(a,1pg10.3)",' apophis radius scaled by ',scale_r_apophis
+    
+    ! determine mass of apophis based on the relevant density for the eos.
+    ! assume it follows tillotson if not otherwise defined
+    if(ieos == 26 .or. use_granular) then
+      m_apophis = 4./3.*pi*(rhos*scale_rho/unit_density)*r_apophis**3
+    else
+      m_apophis = 4./3.*pi*(rho_0*scale_rho/unit_density)*r_apophis**3
+    endif
 
-    m_apophis = 4./3.*pi*(rho_0*scale_rho/unit_density)*r_apophis**3
     xyzmh_ptmass(4,nptmass) = m_apophis
     print "(a,2(es10.3,a))",' mass of apophis is ',m_apophis*umass,&
                             ' g or ',m_apophis*umass/ceresm,' ceres masses'
@@ -299,6 +330,10 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
        !
        if (ieos==23) then
           spsoundmin = sqrt(A/rho_0)/unit_velocity
+          print "(a,1pg11.4,a)",'     sound speed min = ',spsoundmin*unit_velocity/km,' km/s'
+          print "(a,1pg10.3,a)",' sound crossing time = ',(r_apophis/spsoundmin)*utime,' seconds'
+       elseif (ieos==26) then
+          spsoundmin = sqrt(K/rhos) 
           print "(a,1pg11.4,a)",'     sound speed min = ',spsoundmin*unit_velocity/km,' km/s'
           print "(a,1pg10.3,a)",' sound crossing time = ',(r_apophis/spsoundmin)*utime,' seconds'
        endif
@@ -650,11 +685,14 @@ subroutine write_setupfile(filename)
  open(unit=iunit,file=filename,status='replace',form='formatted')
 
  write(iunit,"(a)") '# input file for solar system setup routines'
- call write_inopt(tmax_in,'tmax_in','end time of simulation (e.g. 3 days)',iunit)
+ call write_inopt(tmax_in,'tmax_in','end time of simulation (e.g. 10 days)',iunit)
  call write_inopt(dtmax_in,'dtmax_in','time between dumps (e.g. 1 hr)',iunit)
  call write_inopt(asteroids,'asteroids','add distant minor bodies as km-sized dust particles',iunit)
  call write_inopt(np_apophis,'np_apophis','number of particles used to represent apophis (0=none; 1=sink; n=gas)',iunit)
  call write_inopt(epoch,'epoch','epoch to query ephemeris, YYYY-MMM-DD HH:MM:SS.fff, blank = today',iunit)
+
+ call write_inopt(use_granular,'use_granular','simulate apophis as rubble using granular flow',iunit)
+ call write_inopt(apophis_rho,'apophis_rho','density of apophis for the incomp eos (in g/cm^3)',iunit)
 
  call write_inopt(use_dem,'use_dem','use the discrete element method for sink-sink interactions',iunit)
  call write_inopt(apophis_only,'apophis_only','only add apophis',iunit)
@@ -700,6 +738,9 @@ subroutine read_setupfile(filename,ierr)
  call read_inopt(asteroids,'asteroids',db,errcount=nerr)
  call read_inopt(np_apophis,'np_apophis',db,min=0,errcount=nerr)
  call read_inopt(epoch,'epoch',db,errcount=nerr)
+
+ call read_inopt(use_granular,'use_granular',db,errcount=nerr)
+ call read_inopt(apophis_rho,'apophis_rho',db,errcount=nerr)
 
  call read_inopt(use_dem,'use_dem',db,errcount=nerr)
  call read_inopt(apophis_only,'apophis_only',db,errcount=nerr)
