@@ -461,7 +461,7 @@ subroutine center_and_scale_vertices(vertices,bmin,bmax,scale)
  if (extent <= 0.) then
     s = scale
  else
-    s = scale * 2.0 / extent
+    s = scale !* 2.0 / extent
  endif
  do i=1,size(vertices,2)
     vertices(:,i) = (vertices(:,i) - c)*s
