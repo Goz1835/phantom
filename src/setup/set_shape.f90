@@ -29,7 +29,7 @@ module shape
 
 contains
 
-subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,objfile)
+subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,objfile,mesh_v)
  character(len=*), intent(in)    :: lattice
  integer,          intent(in)    :: id,master
  integer,          intent(in)    :: np_requested
@@ -38,6 +38,7 @@ subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,
  real,             intent(out)   :: xyzh(:,:)
  integer(kind=8),  intent(inout) :: nptot
  character(len=*), intent(in)    :: objfile
+ real,             intent(out)   :: mesh_v
  integer :: i,iter,np_try,np_keep,ncube
  real    :: xmin,xmax,ymin,ymax,zmin,zmax,delta,ratio
  character(len=32) :: shape_kind
@@ -47,6 +48,7 @@ subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,
  real, allocatable :: vertices(:,:)
  integer, allocatable :: faces(:,:)
  real :: bmin(3),bmax(3)
+ real :: v_code_units
  logical :: mesh_ok
 
  xmin = -rmax; xmax = rmax
@@ -57,6 +59,10 @@ subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,
  mesh_ok = .false.
  if (trim(shape_kind) == 'mesh') then
     call load_obj_mesh(trim(meshfile),p1,vertices,faces,bmin,bmax,mesh_ok,id,master)
+    if (mesh_ok .and. id==master) then
+       mesh_v = mesh_volume(vertices,faces)
+       write(*,"(1x,a,1pg12.5)") 'mesh enclosed volume = ',mesh_v
+    endif
     if (.not.mesh_ok) then
       shape_kind = 'sphere'
       p1 = rmax
@@ -77,6 +83,7 @@ subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,
     call set_unifdis(lattice,id,master,xmin,xmax,ymin,ymax,zmin,zmax,delta,hfact,np,xyzh,.false., &
                      nptot=nptot,verbose=(id==master),centre=.true.)
 
+    ! crop the lattice into only the particles inside the mesh
     np_try = np
     if (trim(shape_kind) == 'mesh' .and. mesh_ok) then
        np_keep = crop_particles_mesh(np,xyzh,vertices,faces,bmin,bmax)
@@ -85,6 +92,10 @@ subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,
     endif
     np = np_keep
     nptot = int(np_keep,kind=8)
+
+    ! based on this, assuming the lattice is homogenously distributed you can calculate volume
+    ! of the mesh by the ratio of particles kept times the volume of the initial mesh
+    v_code_units = (real(np_keep) / real(np_try)) * (xmax - xmin) * (ymax - ymin) * (zmax - zmin)
 
     if (np_try <= 0) exit
     if (np_requested <= 0) exit
@@ -102,6 +113,7 @@ subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,
     write(*,"(1x,a,1x,a)") 'shape type:',trim(shape_kind)
     write(*,"(1x,a,1x,i9,a,i9)") 'particles kept:',np,' (target ',np_requested,')'
     write(*,"(1x,a,3(es10.3,1x))") 'shifting origin to ',x0(:)
+    write(*,"(1x,a,1pg12.5)") 'volume in code units = ',v_code_units    
  endif
 
  do i=1,np
@@ -189,6 +201,31 @@ logical function inside_shape(x,y,z,shape_kind,p1,p2,p3,axis) result(ok)
     end select
  end select
 end function inside_shape
+
+!----------------------------------------------------------------
+!+
+!  compute the enclosed volume of a closed triangulated mesh
+!  using the divergence theorem (signed tetrahedron decomposition)
+!  it is returned in whatever units the .obj file is given in 
+!  uncertain if scaling is taken into account
+!+
+!----------------------------------------------------------------
+real function mesh_volume(vertices,faces) result(volume)
+ real,    intent(in) :: vertices(:,:)
+ integer, intent(in) :: faces(:,:)
+ integer :: i
+ real    :: v0(3),v1(3),v2(3)
+
+ volume = 0.
+ do i=1,size(faces,2)
+    v0 = vertices(:,faces(1,i))
+    v1 = vertices(:,faces(2,i))
+    v2 = vertices(:,faces(3,i))
+    volume = volume + dot_product(v0,cross(v1,v2))
+ enddo
+ volume = abs(volume)/6.0
+
+end function mesh_volume
 
 subroutine read_shape_file(objfile,rmax,shape_kind,p1,p2,p3,axis,meshfile,id,master)
  character(len=*), intent(in)  :: objfile

@@ -98,6 +98,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  real    :: r_apophis,m_apophis,rtidal,spsoundmin
  real    :: dr(3),sep_km,sep_re,rperi,rperi_km,rperi_re,ecc,vrel_kms
  real    :: dv(3),spin_axis_resolved(3),torque_align_deg
+ real    :: apophis_v
 !
 ! default runtime parameters
 !
@@ -251,6 +252,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
     xyzmh_ptmass(4,nptmass) = m_apophis
     print "(a,2(es10.3,a))",' mass of apophis is ',m_apophis*umass,&
                             ' g or ',m_apophis*umass/ceresm,' ceres masses'
+    print "(a,1pg10.3,a)",' volume of apophis is calculated as ',4./3.*pi*r_apophis**3*udist**3,' km^3'
     print "(a,1pg10.3,a)",' density is ',m_apophis/(4./3.*pi*r_apophis**3)*unit_density,' g/cm^3'
     rtidal = (2.)**(1./3.)*r_apophis*(earthm/umass/m_apophis)**(1./3.)
     print "(3(a,1pg10.3),a)",' fluid Roche limit r_tidal is ',rtidal,' au, ',&
@@ -291,7 +293,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
        ! replace the sink particle with a ball of stuff
        !
        call set_shape('closepacked',id,master,np_apophis,xyzmh_ptmass(1:3,nptmass),r_apophis,&
-                      hfact,npart,xyzh,npart_total,objfile=apophis_shape_file)
+                      hfact,npart,xyzh,npart_total,objfile=apophis_shape_file, mesh_v=apophis_v)
        !call set_sphere('closepacked',id,master,0.,r_apophis,dx,hfact,npart,xyzh,npart_total,&
        !                xyz_origin=xyzmh_ptmass(1:3,nptmass),exactN=.true.,np_requested=np_apophis)
 
@@ -299,6 +301,8 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
        do i=1,npart
           vxyzu(1:3,i) = vxyz_ptmass(1:3,nptmass)
        enddo
+       ! set mass of apophis based on the rho we target, and the volume calculated
+       m_apophis = rhos * apophis_v
        massoftype(igas) = m_apophis / npart
        npartoftype(igas) = npart
        nptmass = nptmass - 1
