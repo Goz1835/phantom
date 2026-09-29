@@ -583,10 +583,10 @@ pure subroutine get_density_sums(i,xpartveci,hi,hi1,hi21,iamtypei,iamgasi,iamdus
  use boundary, only:dxbound,dybound,dzbound
 #endif
  use kernel,   only:get_kernel,get_kernel_grav1
- use part,     only:iphase,iamgas,iamdust,iamtype,maxphase,ibasetype,igas,idust,rhoh
+ use part,     only:iphase,iamgas,iamdust,iamboundary,iamtype,maxphase,ibasetype,igas,idust,rhoh
  use part,     only:massoftype,iradxi,aprmassoftype
  use dim,      only:gravity,maxp,nalpha,use_dust,do_radiation,use_apr,maxpsph,curlv
- use options,  only:implicit_radiation
+ use options,  only:implicit_radiation,ieos
  integer,         intent(in)    :: i
  real,            intent(in)    :: xpartveci(:)
  real(kind=8),    intent(in)    :: hi,hi1,hi21
@@ -756,10 +756,17 @@ pure subroutine get_density_sums(i,xpartveci,hi,hi1,hi21,iamtypei,iamgasi,iamdus
              runiz = dz*rij1grkern*pmassj
 
              if (getdv) then
-                !--get dv and den
-                dvx = xpartveci(ivxi) - vxyzu(1,j)
-                dvy = xpartveci(ivyi) - vxyzu(2,j)
-                dvz = xpartveci(ivzi) - vxyzu(3,j)
+                if (iamboundary(iamtypej)) then
+                   !--get dv and den
+                   dvx = 2.*xpartveci(ivxi)
+                   dvy = 2.*xpartveci(ivyi)
+                   dvz = 2.*xpartveci(ivzi)
+                else 
+                   !--get dv and den
+                   dvx = xpartveci(ivxi) - vxyzu(1,j)
+                   dvy = xpartveci(ivyi) - vxyzu(2,j)
+                   dvz = xpartveci(ivzi) - vxyzu(3,j)
+                end if
                 projv = dvx*runix + dvy*runiy + dvz*runiz
                 rhosum(idivvi) = rhosum(idivvi) + projv
 

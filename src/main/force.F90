@@ -1373,9 +1373,16 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
        fgrav = 0.5*(pmassj*fgravi + pmassi*fgravj)
 
        !--get dv : needed for timestep and av term
-       vxj = vxyzu(1,j)
-       vyj = vxyzu(2,j)
-       vzj = vxyzu(3,j)
+       if (iamboundary(iamtypej) .and. iamgasi .and. irealvisc == 4) then
+         vxj = -vxi
+         vyj = -vyi
+         vzj = -vzi
+       else
+         vxj = vxyzu(1,j)
+         vyj = vxyzu(2,j)
+         vzj = vxyzu(3,j)
+       endif
+
        projvi = vxi*runix + vyi*runiy + vzi*runiz
        projvj = vxj*runix + vyj*runiy + vzj*runiz
        dvx = vxi - vxj
@@ -1466,7 +1473,28 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
 
           if (maxdvdx==maxp) dvdxj(:) = dvdx(:,j)
 
-          if (iamgasj) then
+          if (iamboundary(iamtypej) .and. irealvisc == 4) then
+            ! call get_stress(pri,spsoundi,rhoi,rho1i, &
+            !       xyzh(1,i),xyzh(2,i),xyzh(3,i), &
+            !       pmassj, &
+            !       Bxi,Byi,Bzi, &
+            !       pro2j, &
+            !       vwavej,sxxj,sxyj,sxzj,syyj,syzj,szzj, &
+            !       visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxj,stressmax, &
+            !       radPj)
+             !
+             !--calculate j terms (which were precalculated outside loop for i)
+             !
+             call get_stress(pri,spsoundi,rhoi,rho1i,xyzh(1,i),xyzh(2,i),xyzh(3,i), &
+                             pmassj,Bxi,Byi,Bzi, &
+                             pro2j,vwavej, &
+                             sxxj,sxyj,sxzj,syyj,syzj,szzj,visctermisoj,visctermanisoj, &
+                             realviscosity,divvj,bulkvisc,dvdxj,stressmax,radPj)
+
+             mrhoj5   = 0.5*pmassj*rho1j
+             autermj  = mrhoj5*alphau
+             avBtermj = mrhoj5*alphaB*rho1j
+          else if (iamgasj) then
              divvj = divcurlv(1,j)
              if (use_dustfrac) then
                 dustfracj(:) = dustfrac(:,j)
@@ -1490,14 +1518,10 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              !
              !--calculate j terms (which were precalculated outside loop for i)
              !
-            call get_stress(prj,spsoundj,rhoj,rho1j,&
-                        xj,yj,zj, &
-                        pmassj, &
-                        Bxj,Byj,Bzj, &
-                        pro2j, &
-                        vwavej,sxxj,sxyj,sxzj,syyj,syzj,szzj, &
-                        visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxj,stressmax, &
-                        radPj)
+             call get_stress(prj,spsoundj,rhoj,rho1j,xj,yj,zj,pmassj,Bxj,Byj,Bzj, &
+                        pro2j,vwavej, &
+                        sxxj,sxyj,sxzj,syyj,syzj,szzj,visctermisoj,visctermanisoj, &
+                        realviscosity,divvj,bulkvisc,dvdxj,stressmax,radPj)
 
              mrhoj5   = 0.5*pmassj*rho1j
              autermj  = mrhoj5*alphau
@@ -1519,18 +1543,6 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
             sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.; pro2j = 0.; prj = 0.
             dustfracj = 0.; dustfracjsum = 0.; sqrtrhodustfracj = 0.
           endif
-          if (iamboundary(iamtypej) .and. iamgasi .and. irealvisc==4) then
-            ! rho1j = rho1i; rho21j = rho21i;
-            ! sxxj = sxxi; sxyj = sxyi; sxzj = sxzi; syyj = syyi; syzj = syzi; szzj = szzi
-            call get_stress(pri,spsoundi,rhoi,rho1i, &
-                  xyzh(1,i),xyzh(2,i),xyzh(3,i), &
-                  pmassj, &
-                  Bxi,Byi,Bzi, &
-                  pro2j, &
-                  vwavej,sxxj,sxyj,sxzj,syyj,syzj,szzj, &
-                  visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxj,stressmax, &
-                  radPj)
-          end if
        else ! set to zero terms which are used below without an if (usej)
          !rhoj      = 0.
          rho1j     = 0.

@@ -61,7 +61,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  real,              intent(inout) :: time
  character(len=20), intent(in)    :: fileprefix
  real,              intent(out)   :: vxyzu(:,:)
- real                             :: deltab,deltas,totmass
+ real                             :: deltas,totmass
  integer                          :: i,ierr
  character(len=12)                :: elasticbulkmodulus,granulardensity
 
@@ -93,8 +93,8 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  boxsize     = 10.*metre/udist
  nparts      = 40
  height      = 5.0*metre/udist
- radius      = 1.0*metre/udist
- nlayers     = 3
+ radius       = 1.0*metre/udist
+ nlayers       = 3
  !
  ! Infile
  !
@@ -111,17 +111,17 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
                   read_setupfile,write_setupfile)
  if (ierr /= 0) stop 'rerun phantomsetup after editing .setup file'
  deltas = 2*radius/nparts
- 
+
  !
  ! making sandcastle
  !
  call set_unifdis('cubic',id,master,-radius,radius,&
                   -radius,radius,0.0,height,&
                   deltas,hfact,npart,xyzh,periodic,mask=i_belong, rcylmin=0.0, rcylmax=radius)
-   
  !
  ! Finalise particle properties
  !
+ npartoftype(:)    = 0
  npartoftype(igas) = npart
  totmass           = rhozero*(pi*radius**2*height)
  massoftype(igas)      = totmass/reduceall_mpi('+',npartoftype(igas))
@@ -130,29 +130,25 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  do i=1,npart
    vxyzu(:,i) = 0.
    call set_particle_type(i,igas)
-enddo
+ enddo
  !
- ! making boundary
+ ! Put boundary particles on grid
  !
- deltab = deltas
  call set_unifdis('cubic',id,master,-0.5*boxsize,0.5*boxsize,&
-                  -0.5*boxsize,0.5*boxsize,-nlayers*deltab,0.0,&
-                  deltab,hfact,npart,xyzh,periodic,mask=i_belong)
+                  -0.5*boxsize,0.5*boxsize,-nlayers*deltas,0.0,&
+                  deltas,hfact,npart,xyzh,periodic,mask=i_belong)
  !
  ! Finalise particle properties
  !
- npartoftype(:)    = 0
- npartoftype(iboundary) = npart-npartoftype(igas)
- totmass           = rhozero*(boxsize*boxsize*nlayers*deltab)
+ npartoftype(iboundary) = npart - npartoftype(igas)
+ totmass           = rhozero*(boxsize*boxsize*nlayers*deltas)
  massoftype(iboundary)        = totmass/reduceall_mpi('+',npartoftype(iboundary))
- if (id==master) print*,' boundary particle mass = ',massoftype(iboundary)
+ if (id==master) print*,' boundary particle mass = ',massoftype(iboundary) 
 
  do i=npartoftype(igas)+1,npart
-    vxyzu(:,i) = 0.
-    call set_particle_type(i,iboundary)
+ vxyzu(:,i) = 0.
+ call set_particle_type(i,iboundary)
  enddo
-
-
 
  rhos = rhozero
 
