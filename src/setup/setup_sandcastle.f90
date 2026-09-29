@@ -142,7 +142,8 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  !
  npartoftype(iboundary) = npart - npartoftype(igas)
  totmass           = rhozero*(boxsize*boxsize*nlayers*deltas)
- massoftype(iboundary)        = totmass/reduceall_mpi('+',npartoftype(iboundary))
+!  massoftype(iboundary)        = totmass/reduceall_mpi('+',npartoftype(iboundary))
+ massoftype(iboundary) = massoftype(igas)
  if (id==master) print*,' boundary particle mass = ',massoftype(iboundary) 
 
  do i=npartoftype(igas)+1,npart

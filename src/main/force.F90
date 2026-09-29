@@ -1279,6 +1279,8 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
     q2i = rij2*hi21
     if (iamsinkj) then
        hj1 = 1./xyzmh_ptmass(ihsoft,j-maxpsph)
+    else if (iamboundary(iamtypej)) then
+       hj1 = hi1
     else
        !--hj is in the cell cache but not in the neighbour cache
        !  as not accessed during the density summation
@@ -1331,7 +1333,11 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
        !
        if (q2j < radkern2) then
           qj = (rij2*rij1)*hj1
-          grkernj = grkern(q2j,qj)*hj21*hj21*cnormk*gradh(1,j) ! ndim + 1
+          if (iamboundary(iamtypej)) then
+             grkernj = grkerni
+          else
+            grkernj = grkern(q2j,qj)*hj21*hj21*cnormk*gradh(1,j) ! ndim + 1
+         endif
 #ifdef GRAVITY
           call kernel_softening(q2j,qj,phij,fmj)
           fmj    = fmj*hj21
@@ -1400,6 +1406,9 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
           else
              denij = eni - enj
           endif
+       else if (iamboundary(iamtypej)) then 
+         denij = 0.
+         enj = eni
        else
           denij = 0.
           enj = 0.
@@ -1482,18 +1491,32 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
             !       vwavej,sxxj,sxyj,sxzj,syyj,syzj,szzj, &
             !       visctermisoj,visctermanisoj,realviscosity,divvj,bulkvisc,dvdxj,stressmax, &
             !       radPj)
-             !
-             !--calculate j terms (which were precalculated outside loop for i)
-             !
-             call get_stress(pri,spsoundi,rhoi,rho1i,xyzh(1,i),xyzh(2,i),xyzh(3,i), &
-                             pmassj,Bxi,Byi,Bzi, &
-                             pro2j,vwavej, &
-                             sxxj,sxyj,sxzj,syyj,syzj,szzj,visctermisoj,visctermanisoj, &
-                             realviscosity,divvj,bulkvisc,dvdxj,stressmax,radPj)
-
-             mrhoj5   = 0.5*pmassj*rho1j
-             autermj  = mrhoj5*alphau
-             avBtermj = mrhoj5*alphaB*rho1j
+            !
+            !  mrhoj5   = 0.5*pmassj*rho1j
+            !  autermj  = mrhoj5*alphau
+            !  avBtermj = mrhoj5*alphaB*rho1j
+            ! copy gas particle i's properties onto boundary particle j (Bui & Nguyen 2021, Sec. 3.5.1)
+            rhoj     = rhoi;  rho1j = rho1i;  rho21j = rho21i
+            alphaj   = alphai
+            prj      = pri
+            spsoundj = spsoundi
+            vwavej   = vwavei
+            pro2j    = pro2i
+            sxxj = sxxi; sxyj = sxyi; sxzj = sxzi
+            syyj = syyi; syzj = syzi; szzj = szzi
+            visctermisoj   = visctermiso
+            visctermanisoj = visctermaniso
+            dvdxj(:) = dvdxi(:)
+            divvj    = dvdxi(1) + dvdxi(5) + dvdxi(9)
+            radPj    = 0.
+            mrhoj5   = mrhoi5
+            autermj  = mrhoj5*alphau
+            avBtermj = 0.
+            dustfracj(:) = 0.; dustfracjsum = 0.; sqrtrhodustfracj(:) = 0.
+            rhogasj  = rhoj
+            vsigj    = max(vwavej - beta*projv,0.)
+            vsigavj  = max(alphaj*vwavej - beta*projv,0.)
+            if (vsigj > vsigmax) vsigmax = vsigj
           else if (iamgasj) then
              divvj = divcurlv(1,j)
              if (use_dustfrac) then
