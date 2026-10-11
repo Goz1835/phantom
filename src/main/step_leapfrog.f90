@@ -90,7 +90,8 @@ end subroutine init_step
 !------------------------------------------------------------
 subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
  use dim,            only:maxp,maxvxyzu,maxptmass,maxalpha,nalpha,h2chemistry,&
-                          use_dustgrowth,use_krome,gr,do_radiation,use_apr,use_sinktree
+                          use_dustgrowth,use_krome,gr,do_radiation,use_apr,use_sinktree,&
+                          do_evolveddensity
  use io,             only:iprint,fatal,iverbose,id,master,warning
  use options,        only:iexternalforce,use_dustfrac,implicit_radiation,&
                           use_porosity,icooling
@@ -102,7 +103,8 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                           dustfrac,dustevol,ddustevol,eos_vars,alphaind,nptmass,&
                           dustprop,ddustprop,dustproppred,pxyzu,dens,metrics,ics,&
                           filfac,filfacpred,mprev,filfacprev,aprmassoftype,&
-                          fxyz_ptmass_tree
+                          fxyz_ptmass_tree,&
+                          rhomat,drhomatdt,rhomatpred
  use part,           only:nptmass,xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass, &
                           dsdt_ptmass,fsink_old,ibin_wake,dptmass, &
                           pxyzu_ptmass,metrics_ptmass
@@ -177,6 +179,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
  !$omp shared(dustprop,ddustprop,dustproppred,ufloor,icooling,Tfloor) &
  !$omp shared(mprev,filfacprev,filfac,use_porosity) &
  !$omp shared(ibin,ibin_old,twas,timei) &
+ !$omp shared(rhomat, drhomatdt) &
  !$omp firstprivate(itype) &
  !$omp private(i,hdti) &
  !$omp reduction(+:nvfloorp)
@@ -225,6 +228,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
        if (itype==igas) then
           if (mhd)          Bevol(:,i) = Bevol(:,i) + hdti*dBevol(:,i)
           if (do_radiation) rad(:,i)   = rad(:,i) + hdti*drad(:,i)
+          if (do_evolveddensity) rhomat(i) = rhomat(i) + hdti*drhomatdt(i) 
           if (use_dustfrac) then
              dustevol(:,i) = abs(dustevol(:,i) + hdti*ddustevol(:,i))
              if (use_dustgrowth) dustprop(:,i) = dustprop(:,i) + hdti*ddustprop(:,i)
@@ -300,6 +304,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
 !$omp shared(eos_vars,ufloor,icooling,Tfloor) &
 !$omp shared(twas,timei) &
 !$omp shared(rad,drad,radpred)&
+!$omp shared(rhomat, drhomatdt, rhomatpred) &
 !$omp private(hi,rhoi,tdecay1,source,ddenom,hdti) &
 !$omp private(i,spsoundi,alphaloci) &
 !$omp firstprivate(pmassi,itype,alpha) &
@@ -323,6 +328,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
              if (use_dustgrowth) dustproppred(:,i) = dustprop(:,i)
              if (use_dustfrac)   dustpred(:,i) = dustevol(:,i)
              if (do_radiation)   radpred(:,i) = rad(:,i)
+             if (do_evolveddensity) rhomatpred(i) = rhomat(i)
              cycle predict_sph
           endif
        endif
@@ -371,6 +377,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
              if (use_dustgrowth) dustproppred(:,i) = dustprop(:,i) + hdti*ddustprop(:,i)
           endif
           if (do_radiation) radpred(:,i) = rad(:,i) + hdti*drad(:,i)
+          if (do_evolveddensity) rhomatpred(i) = rhomat(i) + hdti*drhomatdt(i)
        endif
        !
        ! viscosity switch ONLY (conductivity and resistivity do not use MM97-style switches)
@@ -417,7 +424,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
     call derivs(1,npart,nactive,xyzh,vpred,fxyzu,fext,divcurlv,&
                 divcurlB,Bpred,dBevol,radpred,drad,radprop,dustproppred,ddustprop,&
                 dustpred,ddustevol,filfacpred,dustfrac,eos_vars,timei,dtsph,dtnew,&
-                ppred,dens,metrics,apr_level)
+                ppred,dens,metrics,apr_level,drhomatdt)
     if (do_radiation .and. implicit_radiation) then
        rad = radpred
        vxyzu(4,1:npart) = vpred(4,1:npart)
@@ -472,6 +479,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
 !$omp shared(ibin_dts,nbinmax) &
 !$omp private(dti,hdti) &
 !$omp shared(rad,radpred,drad)&
+!$omp shared(rhomat,drhomatdt) &
 !$omp private(i,vxi,vyi,vzi) &
 !$omp private(pxi,pyi,pzi,p2i) &
 !$omp private(erri,v2i,eni) &
@@ -507,6 +515,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                 if (itype==igas) then
                    if (mhd)          Bevol(:,i) = Bevol(:,i) + dti*dBevol(:,i)
                    if (do_radiation) rad(:,i)   = rad(:,i)   + dti*drad(:,i)
+                   if (do_evolveddensity) rhomat(i) = rhomat(i) + dti*drhomatdt(i)
                    if (use_dustfrac) then
                       dustevol(:,i) = dustevol(:,i) + dti*ddustevol(:,i)
                       if (use_dustgrowth) dustprop(:,i) = dustprop(:,i) + dti*ddustprop(:,i)
@@ -542,6 +551,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
              if (itype==igas) then
                 if (mhd)          Bevol(:,i) = Bevol(:,i) + hdti*dBevol(:,i)
                 if (do_radiation) rad(:,i)   = rad(:,i)   + hdti*drad(:,i)
+                if (do_evolveddensity) rhomat(i) = rhomat(i) + hdti*drhomatdt(i)
                 if (use_dustfrac) then
                    dustevol(:,i) = dustevol(:,i) + hdti*ddustevol(:,i)
                    if (use_dustgrowth) dustprop(:,i) = dustprop(:,i) + hdti*ddustprop(:,i)
@@ -613,6 +623,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                 !
                 if (mhd)          Bevol(:,i) = Bevol(:,i)  + hdtsph*dBevol(:,i)
                 if (do_radiation) rad(:,i)   = rad(:,i) + hdtsph*drad(:,i)
+                if (do_evolveddensity) rhomat(i) = rhomat(i) + hdtsph*drhomatdt(i)
                 if (use_dustfrac) then
                    dustevol(:,i) = dustevol(:,i) + hdtsph*ddustevol(:,i)
                    if (use_dustgrowth) dustprop(:,i) = dustprop(:,i) + hdtsph*ddustprop(:,i)
@@ -645,6 +656,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
 !$omp shared(dustprop,ddustprop,dustproppred,use_dustfrac,dustevol,dustpred,ddustevol) &
 !$omp shared(filfac,filfacpred,use_porosity) &
 !$omp shared(rad,drad,radpred,icooling,Tfloor,xyzh) &
+!$omp shared(rhomat, drhomatdt, rhomatpred) &
 !$omp firstprivate(itype) &
 !$omp schedule(static)
        until_converged: do i=1,npart
@@ -675,6 +687,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
              if (mhd)          Bpred(:,i)  = Bevol(:,i)
              if (use_dustfrac) dustpred(:,i) = dustevol(:,i)
              if (do_radiation) radpred(:,i) = rad(:,i)
+             if (do_evolveddensity) rhomatpred(i) = rhomat(i)
              !
              ! shift v back to the half step
              !
@@ -696,6 +709,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                    if (use_dustgrowth) dustprop(:,i) = dustprop(:,i) - hdtsph*ddustprop(:,i)
                 endif
                 if (do_radiation) rad(:,i) = rad(:,i) - hdtsph*drad(:,i)
+                if (do_evolveddensity) rhomat(i) = rhomat(i) - hdtsph*drhomatdt(i)
              endif
           endif
        enddo until_converged
@@ -713,7 +727,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
        if (gr) vpred = vxyzu ! Need primitive utherm as a guess in cons2prim
        call derivs(2,npart,nactive,xyzh,vpred,fxyzu,fext,divcurlv,divcurlB, &
                      Bpred,dBevol,radpred,drad,radprop,dustproppred,ddustprop,dustpred,ddustevol,filfacpred,&
-                     dustfrac,eos_vars,timei,dtsph,dtnew,ppred,dens,metrics,apr_level)
+                     dustfrac,eos_vars,timei,dtsph,dtnew,ppred,dens,metrics,apr_level,drhomatdt)
        if (gr) vxyzu = vpred ! May need primitive variables elsewhere?
        if (do_radiation .and. implicit_radiation) then
           rad = radpred

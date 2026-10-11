@@ -37,7 +37,8 @@ contains
 subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
                   Bevol,dBevol,rad,drad,radprop,dustprop,ddustprop,&
                   dustevol,ddustevol,filfac,dustfrac,eos_vars,time,dt,dtnew,pxyzu,&
-                  dens,metrics,apr_level)
+                  dens,metrics,apr_level,&
+                  drhomatdt)
  use dim,            only:mhd,fast_divcurlB,gr,periodic,do_radiation,driving,&
                           sink_radiation,use_dustgrowth,ind_timesteps,isothermal
  use io,             only:iprint,fatal,error
@@ -86,6 +87,7 @@ subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
  real,            intent(out)   :: dtnew
  real,            intent(inout) :: pxyzu(:,:), dens(:)
  real,            intent(inout) :: metrics(:,:,:,:)
+ real,            intent(out)   :: drhomatdt(:)
  integer(kind=1), intent(in)    :: apr_level(:)
  integer                     :: ierr,i
  real(kind=4)                :: t1,tcpu1,tlast,tcpulast
@@ -188,7 +190,8 @@ subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
  if (sinks_have_heating(nptmass,xyzmh_ptmass)) call ptmass_calc_enclosed_mass(nptmass,npart,xyzh)
  call force(icall,npart,xyzh,vxyzu,fxyzu,divcurlv,divcurlB,Bevol,dBevol,&
             rad,drad,radprop,dustprop,dustgasprop,Vrel_disp,dustfrac,ddustevol,fext,fxyz_drag,&
-            ipart_rhomax,dt,stressmax,eos_vars,dens,metrics,apr_level)
+            ipart_rhomax,dt,stressmax,eos_vars,dens,metrics,apr_level,&
+            drhomatdt)
  call do_timing('force',tlast,tcpulast)
 
  !
@@ -246,7 +249,7 @@ subroutine get_derivs_global(tused,dt_new,dt,icall)
  use part,         only:npart,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
                         Bevol,dBevol,rad,drad,radprop,dustprop,ddustprop,filfac,&
                         dustfrac,ddustevol,eos_vars,pxyzu,dens,metrics,dustevol,gr,&
-                        apr_level
+                        apr_level, drhomatdt
  use timing,       only:printused,getused
  use io,           only:id,master
  use cons2prim,    only:prim2consall
@@ -274,7 +277,8 @@ subroutine get_derivs_global(tused,dt_new,dt,icall)
  ! evaluate derivatives
  call derivs(icalli,npart,npart,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,Bevol,dBevol,&
              rad,drad,radprop,dustprop,ddustprop,dustevol,ddustevol,filfac,dustfrac,&
-             eos_vars,time,dti,dtnew,pxyzu,dens,metrics,apr_level)
+             eos_vars,time,dti,dtnew,pxyzu,dens,metrics,apr_level,&
+             drhomatdt)
 
  call getused(t2)
  if (id==master .and. present(tused)) call printused(t1)

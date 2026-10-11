@@ -132,7 +132,7 @@ contains
 !  (and position in the case of the isothermal disc)
 !+
 !----------------------------------------------------------------
-subroutine equationofstate(eos_type,ponrhoi,spsoundi,rhoi,xi,yi,zi,tempi,eni,gamma_local,mu_local,Xlocal,Zlocal,radxi)
+subroutine equationofstate(eos_type,ponrhoi,spsoundi,rhoi,xi,yi,zi,tempi,eni,gamma_local,mu_local,Xlocal,Zlocal,radxi,rhomati)
  use io,            only:fatal,error,warning
  use part,          only:xyzmh_ptmass, nptmass
  use units,         only:unit_density,unit_pressure,unit_ergg,unit_velocity
@@ -157,11 +157,13 @@ subroutine equationofstate(eos_type,ponrhoi,spsoundi,rhoi,xi,yi,zi,tempi,eni,gam
  real,    intent(in),    optional :: eni
  real,    intent(inout), optional :: mu_local,gamma_local
  real,    intent(in),    optional :: Xlocal,Zlocal,radxi
+ real,    intent(in),    optional :: rhomati
  integer :: ierr, i
  real    :: r1,r2
  real    :: mass_r, mass ! defined for generalised Farris prescription
  real    :: gammai,temperaturei,mui,imui,X_i,Z_i
  real    :: cgsrhoi,cgseni,cgspresi,presi,gam1,cgsspsoundi
+ real    :: cgsrhomati
  real    :: uthermconst,kappaBar,kappaPart
  real    :: enthi,pondensi
  !
@@ -545,9 +547,10 @@ subroutine equationofstate(eos_type,ponrhoi,spsoundi,rhoi,xi,yi,zi,tempi,eni,gam
  case (26)
     !Give the function everything in cgs to ensure the values work correctly
     cgsrhoi = rhoi * unit_density
+    cgsrhomati = rhomati * unit_density
     !cgseni  = eni * unit_ergg
-    call equationofstate_incomp(cgsrhoi,cgspresi,cgsspsoundi,gammai)
-    ponrhoi  = real(cgspresi / (unit_pressure * rhoi))
+    call equationofstate_incomp(cgsrhomati,cgspresi,cgsspsoundi,gammai)
+    ponrhoi  = real(cgspresi / (unit_pressure * rhomati))
     spsoundi = real(cgsspsoundi / unit_velocity)
 
  case default

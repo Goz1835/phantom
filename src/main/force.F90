@@ -47,7 +47,8 @@ module forces
 !   viscosity
 !
  use dim, only:maxfsum,maxxpartveciforce,maxp,ndivcurlB,&
-               maxdusttypes,maxdustsmall,do_radiation,maxpsph
+               maxdusttypes,maxdustsmall,do_radiation,maxpsph,&
+               do_evolveddensity
  use mpiforce,    only:cellforce,stackforce
  use neighkdtree, only:leaf_is_active
  use kdtree,      only:inodeparts,inoderange
@@ -193,7 +194,8 @@ contains
 subroutine force(icall,npart,xyzh,vxyzu,fxyzu,divcurlv,divcurlB,Bevol,dBevol,&
                  rad,drad,radprop,dustprop,dustgasprop,Vrel_disp,&
                  dustfrac,ddustevol,fext,fxyz_drag,&
-                 ipart_rhomax,dt,stressmax,eos_vars,dens,metrics,apr_level)
+                 ipart_rhomax,dt,stressmax,eos_vars,dens,metrics,apr_level, &
+                 drhomatdt)
 
  use dim,          only:maxvxyzu,mhd,mhd_nonideal,mpi,use_dust,use_apr,use_sinktree
  use io,           only:iprint,fatal,iverbose,id,master,real4,warning,error,nprocs
@@ -261,6 +263,7 @@ subroutine force(icall,npart,xyzh,vxyzu,fxyzu,divcurlv,divcurlB,Bevol,dBevol,&
  real,            intent(out)   :: drad(:,:)
  real,            intent(inout) :: radprop(:,:)
  real,            intent(in)    :: dens(:), metrics(:,:,:,:)
+ real,            intent(out)   :: drhomatdt(:)
  real, save :: xyzcache(4,maxcellcache)
 !$omp threadprivate(xyzcache)
  integer :: i,icell,nneigh
@@ -430,6 +433,7 @@ subroutine force(icall,npart,xyzh,vxyzu,fxyzu,divcurlv,divcurlB,Bevol,dBevol,&
 !$omp shared(divcurlb) &
 !$omp shared(bevol) &
 !$omp shared(rad,radprop,drad) &
+!$omp shared(drhomatdt) &
 !$omp shared(eta_nimhd) &
 !$omp shared(alphaind) &
 !$omp shared(stressmax) &
@@ -564,7 +568,8 @@ subroutine force(icall,npart,xyzh,vxyzu,fxyzu,divcurlv,divcurlB,Bevol,dBevol,&
                              dtradfacmax  ,dtcleanfacmax, &
 #endif
                              ndustres,dustresfacmax,dustresfacmean, &
-                             rad,drad,radprop,dtrad)
+                             rad,drad,radprop,dtrad, &
+                             drhomatdt)
     endif
 
  enddo over_cells
@@ -656,7 +661,8 @@ subroutine force(icall,npart,xyzh,vxyzu,fxyzu,divcurlv,divcurlB,Bevol,dBevol,&
                                           dtradfacmax  ,dtcleanfacmax, &
 #endif
                                           ndustres,dustresfacmax,dustresfacmean, &
-                                          rad,drad,radprop,dtrad)
+                                          rad,drad,radprop,dtrad, &
+                                          drhomatdt)
 
     enddo over_waiting
     !$omp enddo
@@ -1552,7 +1558,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
          sxxj = 0.; sxyj = 0.; sxzj = 0.; syyj = 0.; syzj = 0.; szzj = 0.
        endif
 
-       ifgas: if (iamgasi .and. iamgasj) then
+       ifgas: if (iamgasi .and. iamgasj) then 
           !
           !--artificial viscosity term
           !
@@ -2443,6 +2449,7 @@ subroutine start_cell(cell,iphase,xyzh,vxyzu,gradh,divcurlv,divcurlB,dvdx,Bevol,
           cell%apr(cell%npcell)                        = 1
        endif
 
+
        alphai = alpha
        if (maxalpha==maxp) then
           alphai = alphaind(1,i)
@@ -2679,7 +2686,8 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
                                          dtradfacmax  ,dtcleanfacmax, &
 #endif
                                          ndustres,dustresfacmax,dustresfacmean,&
-                                         rad,drad,radprop,dtrad)
+                                         rad,drad,radprop,dtrad, &
+                                         drhomatdt)
 
  use io,             only:fatal,warning
  use dim,            only:mhd,mhd_nonideal,track_lum,use_dust,maxdvdx,use_dustgrowth,gr,use_krome,driving,isothermal,&
@@ -2754,6 +2762,7 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
  real,    intent(in)    :: rad(:,:),radprop(:,:)
  real,    intent(out)   :: drad(:,:)
  real,    intent(inout) :: dtrad
+ real,    intent(out)   :: drhomatdt(:)
  real    :: c_code,dtradi,radlambdai,radkappai
  real    :: xpartveci(maxxpartveciforce),fsum(maxfsum)
  real    :: rhoi,rho1i,rhogasi,hi,hi1,pmassi,tempi,gammai
@@ -3013,6 +3022,7 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
     isgas: if (iamgasi) then
        divvi = -drhodti*rho1i
        divcurlv(1,i) = real(divvi,kind=kind(divcurlv)) ! store divv from forces
+       if(do_evolveddensity) drhomatdt(i) = drhodti
 
        if (.not.isothermal .or. track_lum) then
           if (maxdvdx == maxp .and. realviscosity) then
@@ -3218,7 +3228,8 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
           !-get dust relative velocity in the kernel, sum all dimensions quadratically
           Vrel_disp(i) = sqrt(fsum(ivreldispxi)**2 + fsum(ivreldispyi)**2 + fsum(ivreldispzi)**2)
        endif
-
+      
+       if(do_evolveddensity) drhomatdt(i) = 0.
        if (maxvxyzu > 4) fxyzu(4,i) = 0.
        ! timestep based on Courant condition for non-gas particles
        vsigdtc = vsigmax

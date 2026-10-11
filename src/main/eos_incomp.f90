@@ -60,7 +60,7 @@ subroutine equationofstate_incomp(rho,pressure,spsound,gamma)
  ! Everything has been input in cgs
 
  rhos_inv = 1. / rhos ! rho s is already in code units, so just need to get the inverse
- pressure = K * (rho * rhos_inv-1.)
+ pressure = K * (rho * rhos_inv - 1.)
  gamma = 1.
  spsound = sqrt(K * rhos_inv)
 

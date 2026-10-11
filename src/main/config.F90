@@ -161,6 +161,10 @@ module dim
  integer, parameter :: nalpha = 3
 #endif
 
+ ! incompressible equation of state variables
+ logical, parameter :: do_evolveddensity = .true.
+ integer :: max_evolved_density = 0
+
  ! default is to only store divv
  integer :: ndivcurlv = 1
  logical :: curlv = .false.
@@ -433,6 +437,9 @@ subroutine update_max_sizes(n,ntot)
  if (do_radiation) then
     maxprad = maxp
     maxlum = maxp
+ endif
+ if(do_evolveddensity) then
+    max_evolved_density = maxp
  endif
 ! Very convoluted, but follows original logic...
  maxphase = maxan

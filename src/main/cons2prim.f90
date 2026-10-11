@@ -275,7 +275,8 @@ subroutine cons2prim_everything(npart,xyzh,vxyzu,dvdx,rad,eos_vars,radprop,&
                                 Bevol,Bxyz,dustevol,dustfrac,alphaind)
  use part,              only:isdead_or_accreted,massoftype,igas,rhoh,igasP,iradP,iradxi,ics,imu,iX,iZ,&
                              iohm,ihall,nden_nimhd,eta_nimhd,iambi,get_partinfo,iphase,this_is_a_test,&
-                             ndustsmall,itemp,ikappa,idmu,idgamma,icv,aprmassoftype,apr_level
+                             ndustsmall,itemp,ikappa,idmu,idgamma,icv,aprmassoftype,apr_level,&
+                             rhomat
  use part,              only:nucleation,igamma
  use eos,               only:equationofstate,ieos,eos_outputs_mu,done_init_eos,init_eos,gmw,X_in,Z_in,gamma
  use radiation_utils,   only:radiation_equation_of_state,get_opacity
@@ -296,6 +297,7 @@ subroutine cons2prim_everything(npart,xyzh,vxyzu,dvdx,rad,eos_vars,radprop,&
  real         :: rhoi,spsound,p_on_rhogas,rhogas,gasfrac,pmassi,uui
  real         :: Bxi,Byi,Bzi,psii,xi_limiteri,Bi,temperaturei,mui,X_i,Z_i,gammai
  real         :: xi,yi,zi,hi
+ real         :: rhomati
  logical      :: iactivei,iamgasi,iamdusti
 
  iactivei = .true.
@@ -311,6 +313,7 @@ subroutine cons2prim_everything(npart,xyzh,vxyzu,dvdx,rad,eos_vars,radprop,&
  mui    = gmw
  X_i    = X_in
  Z_i    = Z_in
+ rhomati = 0.
 
 !$omp parallel do default (none) &
 !$omp shared(xyzh,vxyzu,npart,rad,eos_vars,radprop,Bevol,Bxyz,apr_level) &
@@ -318,10 +321,11 @@ subroutine cons2prim_everything(npart,xyzh,vxyzu,dvdx,rad,eos_vars,radprop,&
 !$omp shared(alpha,alphamax,iphase,maxphase,maxp,massoftype,aprmassoftype) &
 !$omp shared(use_dustfrac,dustfrac,dustevol,this_is_a_test,ndustsmall,alphaind,dvdx) &
 !$omp shared(iopacity_type,use_var_comp,do_nucleation,update_muGamma,implicit_radiation) &
+!$omp shared(rhomat) &
 !$omp private(i,spsound,rhoi,p_on_rhogas,rhogas,gasfrac,uui) &
 !$omp private(Bxi,Byi,Bzi,psii,xi_limiteri,Bi,temperaturei,ierr,pmassi) &
 !$omp private(xi,yi,zi,hi) &
-!$omp firstprivate(iactivei,iamtypei,iamgasi,iamdusti,mui,gammai,X_i,Z_i) &
+!$omp firstprivate(iactivei,iamtypei,iamgasi,iamdusti,mui,gammai,X_i,Z_i,rhomati) &
 !$omp reduction(+:ierrlist)
  do i=1,npart
     if (.not.isdead_or_accreted(xyzh(4,i))) then
@@ -375,13 +379,14 @@ subroutine cons2prim_everything(npart,xyzh,vxyzu,dvdx,rad,eos_vars,radprop,&
        endif
        if (use_krome) gammai = eos_vars(igamma,i)
        if (ieos==22) mui = eos_vars(imu,i)
+       if (ieos==26) rhomati = rhomat(i)
        if (maxvxyzu >= 4) then
           uui = vxyzu(4,i)
           if (uui < 0. .and. .not. ieos==23) then
              call warning('cons2prim','Internal energy < 0',i,'u',uui)
           endif
           call equationofstate(ieos,p_on_rhogas,spsound,rhogas,xi,yi,zi,temperaturei,eni=uui,&
-                               gamma_local=gammai,mu_local=mui,Xlocal=X_i,Zlocal=Z_i)
+                               gamma_local=gammai,mu_local=mui,Xlocal=X_i,Zlocal=Z_i,rhomati=rhomati)
        else
           !isothermal
           call equationofstate(ieos,p_on_rhogas,spsound,rhogas,xi,yi,zi,temperaturei,mu_local=mui)

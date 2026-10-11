@@ -29,6 +29,7 @@ module readwrite_dumps
 
  logical, public :: opened_full_dump
  logical, public :: dt_read_in
+ logical, public :: got_evolve_dens = .false. 
 
  integer, parameter :: maxphead = 256         ! max items in header
  integer, parameter :: is_small_dump = 1978
@@ -46,7 +47,7 @@ subroutine write_fulldump(t,dumpfile,ntotal,iorder,sphNG)
  use dim,   only:maxp,maxvxyzu,maxalpha,ndivcurlv,ndivcurlB,maxgrav,gravity,use_dust,&
                    track_lum,use_dustgrowth,store_dust_temperature,gr,do_nucleation,&
                    ind_timesteps,mhd_nonideal,use_krome,h2chemistry,update_muGamma,mpi,use_apr,&
-                   inject_parts
+                   inject_parts,do_evolveddensity
  use eos,   only:ieos,eos_is_non_ideal,eos_outputs_mu,eos_outputs_gasP,eos_outputs_temp,eos_outputs_gamma
  use io,    only:idump,iprint,real4,id,master,error,warning,nprocs
  use part,  only:xyzh,xyzh_label,vxyzu,vxyzu_label,Bevol,Bevol_label,Bxyz,Bxyz_label,npart,maxtypes, &
@@ -60,7 +61,8 @@ subroutine write_fulldump(t,dumpfile,ntotal,iorder,sphNG)
  !dvdx,dvdx_label,&
                    rad,rad_label,radprop,radprop_label,do_radiation,maxirad,maxradprop,itemp,igasP,igamma,&
                    iorig,iseed_sink,iX,iZ,imu,nucleation,nucleation_label,n_nucleation,tau,itau_alloc,tau_lucy,itauL_alloc,&
-                   luminosity,eta_nimhd,eta_nimhd_label,apr_level
+                   luminosity,eta_nimhd,eta_nimhd_label,apr_level,&
+                   rhomat,rhomat_label
  use part,  only:metrics,metricderivs,tmunus
  use options,    only:use_dustfrac,use_porosity,use_var_comp,icooling
  use dump_utils, only:tag,open_dumpfile_w,allocate_header,&
@@ -278,6 +280,7 @@ subroutine write_fulldump(t,dumpfile,ntotal,iorder,sphNG)
        if (do_nucleation) call write_array(1,nucleation,nucleation_label,n_nucleation,npart,k,ipass,idump,nums,nerr)
        if (itau_alloc == 1) call write_array(1,tau,'tau',npart,k,ipass,idump,nums,nerr)
        if (itauL_alloc == 1) call write_array(1,tau_lucy,'tau_lucy',npart,k,ipass,idump,nums,nerr)
+       if (do_evolveddensity) call write_array(1,rhomat,rhomat_label,npart,k,ipass,idump,nums,nerr)
        if (store_dust_temperature) call write_array(1,dust_temp,'Tdust',npart,k,ipass,idump,nums,nerr)
        if (do_radiation) then
           call write_array(1,rad,rad_label,maxirad,npart,k,ipass,idump,nums,nerr)
@@ -510,6 +513,7 @@ subroutine read_dump(dumpfile,tfile,hfactfile,idisk1,iprint,id,nprocs,ierr,heade
  if (id==master .and. iverbose >= 0) write(iprint,"(/,1x,a,i3)") '>>> reading setup from file: '//trim(dumpfile)//' on unit ',idisk1
  opened_full_dump = .true.
  dt_read_in = .false.
+ got_evolve_dens =.false.
  !
  ! open dump file
  !
@@ -960,7 +964,7 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
  use dump_utils, only:read_array,match_tag
  use dim,        only:use_dust,h2chemistry,maxalpha,maxp,gravity,maxgrav,maxvxyzu,do_nucleation, &
                         use_dustgrowth,maxdusttypes,maxphase,gr,store_dust_temperature,&
-                        ind_timesteps,use_krome,use_apr,mhd,inject_parts
+                        ind_timesteps,use_krome,use_apr,mhd,inject_parts,do_evolveddensity
  use part,       only:xyzh,xyzh_label,vxyzu,vxyzu_label,dustfrac,dustfrac_label,abundance,abundance_label, &
                         alphaind,poten,xyzmh_ptmass,xyzmh_ptmass_label,vxyz_ptmass,vxyz_ptmass_label, &
                         Bevol,Bxyz,Bxyz_label,nabundances,iphase,idust, &
@@ -968,7 +972,8 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
                         VrelVf,VrelVf_label,dustgasprop,dustgasprop_label,filfac,filfac_label,pxyzu,pxyzu_label,dust_temp, &
                         rad,rad_label,radprop,radprop_label,do_radiation,maxirad,maxradprop,ifluxx,ifluxy,ifluxz, &
                         nucleation,nucleation_label,n_nucleation,ikappa,tau,itau_alloc,tau_lucy,itauL_alloc,&
-                        ithick,ilambda,iorig,iseed_sink,dt_in,krome_nmols,T_gas_cool,apr_level
+                        ithick,ilambda,iorig,iseed_sink,dt_in,krome_nmols,T_gas_cool,apr_level,&
+                        rhomat,rhomat_label
  use eos_stamatellos, only:ttherm_store,ueqi_store,tau_store,du_store
  use sphNGutils, only:mass_sphng,got_mass,set_gas_particle_mass
  use options,    only:use_porosity
@@ -1088,6 +1093,9 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
              endif
              if (itauL_alloc == 1) then
                 call read_array(tau_lucy,'tau_lucy',got_ray_tracer,ik,i1,i2,noffset,idisk1,tag,match,ierr)
+             endif
+             if (do_evolveddensity) then
+                call read_array(rhomat,rhomat_label,got_evolve_dens,ik,i1,i2,noffset,idisk1,tag,match,ierr)
              endif
              if (store_dust_temperature) then
                 call read_array(dust_temp,'Tdust',got_Tdust,ik,i1,i2,noffset,idisk1,tag,match,ierr)

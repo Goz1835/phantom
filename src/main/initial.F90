@@ -101,7 +101,7 @@ end subroutine initialise
 !+
 !----------------------------------------------------------------
 subroutine startrun(infile,logfile,evfile,dumpfile,noread)
- use dim,              only:maxp,maxalpha,nalpha,mpi,ind_timesteps,inject_parts,gr
+ use dim,              only:maxp,maxalpha,nalpha,mpi,ind_timesteps,inject_parts,gr,do_evolveddensity
  use io,               only:iprint,flush_warnings,fatal,id,master
  use boundary_dyn,     only:dynamic_bdy,init_dynamic_bdy
  use centreofmass,     only:get_centreofmass,print_particle_extent
@@ -113,7 +113,9 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
  use mpiutils,         only:reduceall_mpi
  use part,             only:npart,npartoftype,alphaind,ntot,update_npartoftypetot,&
                             iamtype,igas,nptmass,xyzmh_ptmass,vxyz_ptmass,&
-                            xyzh,vxyzu,ibin,ibin_old,ibin_wake,ibelong
+                            xyzh,vxyzu,ibin,ibin_old,ibin_wake,ibelong,&
+                            rhomat,drhomatdt,&
+                            isdead_or_accreted
  use partinject,       only:update_injected_particles
  use readwrite_dumps,  only:dt_read_in
  use timing,           only:get_timings
@@ -121,6 +123,8 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
  use timestep_ind,     only:ibinnow,init_ibin,istepfrac,nbinmax
  use writeheader,      only:write_header
  use metric,           only:update_metric
+ use granular_variables,         only:rhos
+ use units,             only:unit_density
  character(len=*), intent(inout) :: infile
  character(len=*), intent(out)   :: logfile,evfile,dumpfile
  logical,          intent(in), optional :: noread
@@ -204,6 +208,19 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
  ! calculate initial derivatives (density, SPH forces, etc.)
  call get_derivs_initial(time,dumpfile,ntot,dtnew_first,ierr)
  if (ierr /= 0) call fatal('initial','error in derivatives setup')
+
+ ! set initial value of the evolved density to be the density in granular
+ if (do_evolveddensity) then
+    do i=1,npart
+       !might not need the isdead check
+       if (isdead_or_accreted(xyzh(4,i))) then
+          rhomat(i) = 0.
+       else
+          rhomat(i) = rhos / unit_density
+       endif
+       drhomatdt(i) = 0.
+    enddo
+ endif
 
  ! set initial timestep
  if (.not.ind_timesteps) then

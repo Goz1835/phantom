@@ -34,7 +34,8 @@ module part
                maxTdust,store_dust_temperature,use_krome,maxp_krome, &
                do_radiation,gr,maxgr,maxgran,n_nden_phantom,do_nucleation,&
                inucleation,itau_alloc,itauL_alloc,inject_parts,use_apr,apr_maxlevel,&
-               maxp_apr,maxptmassgr,use_sinktree,nvel_ptmass
+               maxp_apr,maxptmassgr,use_sinktree,nvel_ptmass,&
+               do_evolveddensity,max_evolved_density
  use dtypekdtree, only:kdnode
 #ifdef KROME
  use krome_user, only:krome_nmols
@@ -125,6 +126,13 @@ module part
  integer, parameter :: ielectron = 4 ! electron abundance
  integer, parameter :: iCO       = 5 ! CO abundance
  real, allocatable :: abundance(:,:)
+!
+!--evolved density
+!
+ real, allocatable :: rhomat(:)    ! evolved quantity
+ real, allocatable :: drhomatdt(:)   ! its time derivative
+ real, allocatable :: rhomatpred(:)    ! predicted value (for the predictor-corrector step)
+ character(len=*), parameter :: rhomat_label = 'rhomat'
 !
 !--KROME chemistry
 !
@@ -556,6 +564,9 @@ subroutine allocate_part
  call allocate_array("shortsinktree", shortsinktree, maxptmass, maxptmass)
  call allocate_array("gtgrad", gtgrad, 3, maxptmass)
  call allocate_array('noverlap', noverlap, maxp)
+ call allocate_array('rhomat', rhomat, max_evolved_density)
+ call allocate_array('drhomatdt', drhomatdt, max_evolved_density)
+ call allocate_array('rhomatpred', rhomatpred, max_evolved_density)
 
 end subroutine allocate_part
 
@@ -648,6 +659,7 @@ subroutine deallocate_part
  if (allocated(shortsinktree))deallocate(shortsinktree)
  if (allocated(gtgrad))       deallocate(gtgrad)
  if (allocated(noverlap))     deallocate(noverlap)
+ if (allocated(rhomat))     deallocate(rhomat, drhomatdt, rhomatpred)
 
 end subroutine deallocate_part
 
@@ -729,6 +741,12 @@ subroutine init_part
     twas(:)       = 0.
  endif
  if (use_sinktree) iphase(maxpsph+1:maxp) = isink
+ !-- Evolved density for μI rheological model (incompressible eos)
+ if(do_evolveddensity) then
+    rhomat(:) = 0.
+    drhomatdt(:) = 0.
+    rhomatpred(:) = 0.
+ endif
 
  ideadhead = 0
 !
@@ -1305,6 +1323,9 @@ subroutine copy_particle(src,dst,new_part)
     iorig(dst) = iorig(src) ! we are moving the particle within the list; maintain ID
  endif
  if (inject_parts) iseed_sink(dst) = iseed_sink(src)
+ if(do_evolveddensity) then
+   rhomat(dst) = rhomat(src)
+ endif
 
 end subroutine copy_particle
 
@@ -1418,6 +1439,11 @@ subroutine copy_particle_all(src,dst,new_part)
     iorig(dst) = iorig(src) ! we are moving the particle within the list; maintain ID
  endif
  if (inject_parts) iseed_sink(dst) = iseed_sink(src)
+ if (do_evolveddensity) then
+    rhomat(dst) = rhomat(src)
+    drhomatdt(dst) = drhomatdt(src)
+    rhomatpred(dst) = rhomatpred(src)
+ endif
 
 end subroutine copy_particle_all
 
@@ -1516,6 +1542,12 @@ subroutine combine_two_particles(keep,discard)
  if (do_nucleation) nucleation(:,keep) = 0.5*(nucleation(:,keep) + nucleation(:,discard))
  if (itau_alloc == 1) tau(keep) = 0.5*(tau(keep) + tau(discard))
  if (itauL_alloc == 1) tau_lucy(keep) = 0.5*(tau_lucy(keep) + tau_lucy(discard))
+
+ if(do_evolveddensity) then
+    rhomat(keep) = 0.5 * (rhomat(keep) + rhomat(discard))
+    drhomatdt(keep) = 0.5 * (drhomatdt(keep) + drhomatdt(discard))
+    rhomatpred(keep) = 0.5 * (rhomatpred(keep) + rhomatpred(discard))
+ endif
 
  if (use_krome) then
     T_gas_cool(keep)       = 0.5*(T_gas_cool(keep) + T_gas_cool(discard))
@@ -1736,6 +1768,11 @@ subroutine fill_sendbuf(i,xtemp,nbuf)
        call fill_buffer(xtemp,dt_in(i),nbuf)
        call fill_buffer(xtemp,twas(i),nbuf)
     endif
+    if(do_evolveddensity) then
+       call fill_buffer(xtemp,rhomat(i), nbuf)
+       call fill_buffer(xtemp,drhomatdt(i), nbuf)
+       call fill_buffer(xtemp,rhomatpred(i), nbuf)
+    endif
     call fill_buffer(xtemp,iorig(i),nbuf)
     if (inject_parts) call fill_buffer(xtemp,iseed_sink(i),nbuf)
     if (use_apr) call fill_buffer(xtemp,apr_level(i),nbuf)
@@ -1822,6 +1859,11 @@ subroutine unfill_buffer(ipart,xbuf)
     ibin_wake(ipart)    = nint(unfill_buf(xbuf,j),kind=1)
     dt_in(ipart)        = real(unfill_buf(xbuf,j),kind=kind(dt_in))
     twas(ipart)         = unfill_buf(xbuf,j)
+ endif
+ if(do_evolveddensity) then
+    rhomat(ipart) = unfill_buf(xbuf,j)
+    drhomatdt(ipart) = unfill_buf(xbuf,j)
+    rhomatpred(ipart) = unfill_buf(xbuf,j)
  endif
  iorig(ipart)           = nint(unfill_buf(xbuf,j),kind=8)
  if (inject_parts) iseed_sink(ipart) = nint(unfill_buf(xbuf,j),kind=8)

@@ -59,11 +59,14 @@ contains
 !----------------------------------------------------------------
 !+
 !  setup for solar system orbits
-!+
+!+                          
 !----------------------------------------------------------------
 subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,time,fileprefix)
- use part,         only:nptmass,xyzmh_ptmass,vxyz_ptmass,idust,set_particle_type,&
-                        grainsize,graindens,ndustlarge,ndusttypes,ndustsmall,ihacc,igas
+ use part,          only:nptmass,xyzmh_ptmass,vxyz_ptmass,idust,set_particle_type,&
+                         grainsize,graindens,ndustlarge,ndusttypes,ndustsmall,ihacc,igas,&
+                         rhomat,drhomatdt,&
+                         isdead_or_accreted
+ use dim,           only:do_evolveddensity
  use setbinary,     only:set_binary
  use units,         only:set_units,umass,udist,unit_density,unit_velocity,utime,in_code_units,in_units
  use physcon,       only:solarm,pi,au,km,solarr,ceresm,earthm,earthr,days
@@ -315,6 +318,19 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
           isink_potential = 2
           i_apophis_first = nptmass - n_apophis_part + 1
           i_apophis_last  = nptmass
+       endif
+
+       ! if using an evolved density, set the density of the particles
+       if (do_evolveddensity) then
+          do i=1,npart
+             !might not need the isdead check
+             if (isdead_or_accreted(xyzh(4,i))) then
+                rhomat(i) = 0.
+             else
+                rhomat(i) = rhos
+             endif
+             drhomatdt(i) = 0.
+          enddo
        endif
 
        if (apophis_spin_period > 0.) then
