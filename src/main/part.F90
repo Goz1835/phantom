@@ -134,6 +134,13 @@ module part
  real, allocatable :: rhomatpred(:)    ! predicted value (for the predictor-corrector step)
  character(len=*), parameter :: rhomat_label = 'rhomat'
 !
+!--rigid boulders made of boundary particles (Bui & Nguyen 2021, sec. 4.4)
+!
+ integer(kind=1), allocatable :: iboulder(:)    ! boulder id of each particle (0 = not part of a boulder)
+ real, allocatable :: xyzboulder0(:,:)           ! offset of each boulder particle from its boulder centre, body frame
+ integer :: nboulders = 0                        ! number of rigid boulders
+ character(len=*), parameter :: iboulder_label = 'iboulder'
+!
 !--KROME chemistry
 !
 #ifdef KROME
@@ -567,6 +574,8 @@ subroutine allocate_part
  call allocate_array('rhomat', rhomat, max_evolved_density)
  call allocate_array('drhomatdt', drhomatdt, max_evolved_density)
  call allocate_array('rhomatpred', rhomatpred, max_evolved_density)
+ call allocate_array('iboulder', iboulder, maxp)
+ call allocate_array('xyzboulder0', xyzboulder0, 3, maxp)
 
 end subroutine allocate_part
 
@@ -660,6 +669,8 @@ subroutine deallocate_part
  if (allocated(gtgrad))       deallocate(gtgrad)
  if (allocated(noverlap))     deallocate(noverlap)
  if (allocated(rhomat))     deallocate(rhomat, drhomatdt, rhomatpred)
+ if (allocated(iboulder))     deallocate(iboulder)
+ if (allocated(xyzboulder0))  deallocate(xyzboulder0)
 
 end subroutine deallocate_part
 
@@ -747,6 +758,10 @@ subroutine init_part
     drhomatdt(:) = 0.
     rhomatpred(:) = 0.
  endif
+ !-- rigid boulders
+ iboulder(:) = 0
+ xyzboulder0(:,:) = 0.
+ nboulders = 0
 
  ideadhead = 0
 !
@@ -1326,6 +1341,8 @@ subroutine copy_particle(src,dst,new_part)
  if(do_evolveddensity) then
    rhomat(dst) = rhomat(src)
  endif
+ iboulder(dst) = iboulder(src)
+ xyzboulder0(:,dst) = xyzboulder0(:,src)
 
 end subroutine copy_particle
 
@@ -1444,6 +1461,8 @@ subroutine copy_particle_all(src,dst,new_part)
     drhomatdt(dst) = drhomatdt(src)
     rhomatpred(dst) = rhomatpred(src)
  endif
+ iboulder(dst) = iboulder(src)
+ xyzboulder0(:,dst) = xyzboulder0(:,src)
 
 end subroutine copy_particle_all
 
@@ -1773,6 +1792,8 @@ subroutine fill_sendbuf(i,xtemp,nbuf)
        call fill_buffer(xtemp,drhomatdt(i), nbuf)
        call fill_buffer(xtemp,rhomatpred(i), nbuf)
     endif
+    call fill_buffer(xtemp,iboulder(i),nbuf)
+    call fill_buffer(xtemp,xyzboulder0(:,i),nbuf)
     call fill_buffer(xtemp,iorig(i),nbuf)
     if (inject_parts) call fill_buffer(xtemp,iseed_sink(i),nbuf)
     if (use_apr) call fill_buffer(xtemp,apr_level(i),nbuf)
@@ -1865,6 +1886,10 @@ subroutine unfill_buffer(ipart,xbuf)
     drhomatdt(ipart) = unfill_buf(xbuf,j)
     rhomatpred(ipart) = unfill_buf(xbuf,j)
  endif
+ iboulder(ipart)        = nint(unfill_buf(xbuf,j),kind=1)
+ xyzboulder0(1,ipart)   = unfill_buf(xbuf,j)
+ xyzboulder0(2,ipart)   = unfill_buf(xbuf,j)
+ xyzboulder0(3,ipart)   = unfill_buf(xbuf,j)
  iorig(ipart)           = nint(unfill_buf(xbuf,j),kind=8)
  if (inject_parts) iseed_sink(ipart) = nint(unfill_buf(xbuf,j),kind=8)
  if (use_apr) apr_level(ipart) = nint(unfill_buf(xbuf,j),kind=kind(apr_level))

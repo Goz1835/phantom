@@ -29,7 +29,15 @@ module shape
 
 contains
 
+!----------------------------------------------------------------
+!+
+!  set up a lattice cropped to the shape in objfile. mesh_v returns
+!  the volume of the shape (mesh, analytic shape or the fallback
+!  sphere) in code units
+!+
+!----------------------------------------------------------------
 subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,objfile,mesh_v)
+ use io, only:warning
  character(len=*), intent(in)    :: lattice
  integer,          intent(in)    :: id,master
  integer,          intent(in)    :: np_requested
@@ -48,29 +56,33 @@ subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,
  real, allocatable :: vertices(:,:)
  integer, allocatable :: faces(:,:)
  real :: bmin(3),bmax(3)
- real :: v_code_units
+ real :: v_code_units,extent
  logical :: mesh_ok
 
  xmin = -rmax; xmax = rmax
  ymin = -rmax; ymax = rmax
  zmin = -rmax; zmax = rmax
+ mesh_v = 0.
+ v_code_units = 0.
 
  call read_shape_file(objfile,rmax,shape_kind,p1,p2,p3,axis,meshfile,id,master)
  mesh_ok = .false.
  if (trim(shape_kind) == 'mesh') then
     call load_obj_mesh(trim(meshfile),p1,vertices,faces,bmin,bmax,mesh_ok,id,master)
-    if (mesh_ok .and. id==master) then
+    if (mesh_ok) then
        mesh_v = mesh_volume(vertices,faces)
-       write(*,"(1x,a,1pg12.5)") 'mesh enclosed volume = ',mesh_v
-    endif
-    if (.not.mesh_ok) then
-      shape_kind = 'sphere'
-      p1 = rmax
-      p2 = rmax
-      p3 = rmax
-      axis = 'z'
+       if (id==master) write(*,"(1x,a,1pg12.5)") 'mesh enclosed volume = ',mesh_v
+    else
+       if (id==master) call warning('set_shape','could not load mesh '//trim(meshfile)//&
+                                    ', using a sphere of radius rmax instead')
+       shape_kind = 'sphere'
+       p1 = rmax
+       p2 = rmax
+       p3 = rmax
+       axis = 'z'
     endif
  endif
+ if (.not.mesh_ok) mesh_v = shape_volume(shape_kind,p1,p2,p3)
 
  np = 0
  nptot = 0_8
@@ -113,7 +125,21 @@ subroutine set_shape(lattice,id,master,np_requested,x0,rmax,hfact,np,xyzh,nptot,
     write(*,"(1x,a,1x,a)") 'shape type:',trim(shape_kind)
     write(*,"(1x,a,1x,i9,a,i9)") 'particles kept:',np,' (target ',np_requested,')'
     write(*,"(1x,a,3(es10.3,1x))") 'shifting origin to ',x0(:)
-    write(*,"(1x,a,1pg12.5)") 'volume in code units = ',v_code_units    
+    write(*,"(1x,a,1pg12.5)") 'volume in code units = ',v_code_units
+ endif
+ !
+ ! the lattice only covers -rmax..rmax, so a shape extending beyond it is
+ ! clipped: use the volume of the cropped lattice instead
+ !
+ if (mesh_ok) then
+    extent = maxval(max(abs(bmin),abs(bmax)))
+ else
+    extent = shape_extent(shape_kind,p1,p2,p3)
+ endif
+ if (extent > rmax) then
+    if (id==master) call warning('set_shape','shape extends beyond rmax and is clipped: '//&
+                                 'using the volume of the cropped lattice',val=v_code_units)
+    mesh_v = v_code_units
  endif
 
  do i=1,np
@@ -227,7 +253,55 @@ real function mesh_volume(vertices,faces) result(volume)
 
 end function mesh_volume
 
+!----------------------------------------------------------------
+!+
+!  volume of an analytic shape (same parameters as inside_shape)
+!+
+!----------------------------------------------------------------
+real function shape_volume(shape_kind,p1,p2,p3) result(volume)
+ use physcon, only:pi
+ character(len=*), intent(in) :: shape_kind
+ real,             intent(in) :: p1,p2,p3
+
+ select case(trim(shape_kind))
+ case('sphere')
+    volume = 4./3.*pi*p1**3
+ case('ellipsoid')
+    volume = 4./3.*pi*p1*p2*p3
+ case('box')
+    volume = 8.*p1*p2*p3     ! p1,p2,p3 are half-widths
+ case('cylinder')
+    volume = pi*p1**2*p2     ! p2 is the full height
+ case default
+    volume = 0.
+ end select
+
+end function shape_volume
+
+!----------------------------------------------------------------
+!+
+!  largest extent of an analytic shape from its centre along x, y or z
+!+
+!----------------------------------------------------------------
+real function shape_extent(shape_kind,p1,p2,p3) result(extent)
+ character(len=*), intent(in) :: shape_kind
+ real,             intent(in) :: p1,p2,p3
+
+ select case(trim(shape_kind))
+ case('sphere')
+    extent = p1
+ case('ellipsoid','box')
+    extent = max(p1,p2,p3)
+ case('cylinder')
+    extent = max(p1,0.5*p2)
+ case default
+    extent = 0.
+ end select
+
+end function shape_extent
+
 subroutine read_shape_file(objfile,rmax,shape_kind,p1,p2,p3,axis,meshfile,id,master)
+ use io, only:warning
  character(len=*), intent(in)  :: objfile
  real,             intent(in)  :: rmax
  character(len=32),intent(out) :: shape_kind
@@ -259,7 +333,8 @@ subroutine read_shape_file(objfile,rmax,shape_kind,p1,p2,p3,axis,meshfile,id,mas
 
  open(newunit=iu,file=trim(objfile),status='old',action='read',iostat=ios)
  if (ios /= 0) then
-    if (id==master) write(*,"(1x,a,1x,a)") 'shape file not found, defaulting to sphere:',trim(objfile)
+    if (id==master) call warning('set_shape','shape file '//trim(objfile)//&
+                                 ' not found, using a sphere of radius rmax instead')
     return
  endif
 
@@ -328,7 +403,8 @@ subroutine read_shape_file(objfile,rmax,shape_kind,p1,p2,p3,axis,meshfile,id,mas
     p3 = rmax
     axis = 'z'
     meshfile = ''
-    if (id==master) write(*,"(1x,a,1x,a)") 'could not parse shape file, using sphere:',trim(objfile)
+    if (id==master) call warning('set_shape','could not parse shape file '//trim(objfile)//&
+                                 ', using a sphere of radius rmax instead')
  endif
 
 end subroutine read_shape_file

@@ -239,17 +239,21 @@ end subroutine substep_gr
 !+
 !----------------------------------------------------------------
 subroutine substep_sph(dt,npart,xyzh,vxyzu)
- use part, only:isdead_or_accreted
+ use part,     only:isdead_or_accreted,iboulder,nboulders
+ use boulders, only:drift_boulders
  real,    intent(in)    :: dt
  integer, intent(in)    :: npart
  real,    intent(inout) :: xyzh(:,:)
- real,    intent(in)    :: vxyzu(:,:)
+ real,    intent(inout) :: vxyzu(:,:)
  integer :: i
 
  !$omp parallel do default(none) &
- !$omp shared(npart,xyzh,vxyzu,dt) &
+ !$omp shared(npart,xyzh,vxyzu,dt,iboulder,nboulders) &
  !$omp private(i)
  do i=1,npart
+    if (nboulders > 0) then
+       if (iboulder(i) > 0) cycle   ! rigid boulders are moved by drift_boulders
+    endif
     if (.not.isdead_or_accreted(xyzh(4,i))) then
        !
        ! main position update
@@ -260,6 +264,7 @@ subroutine substep_sph(dt,npart,xyzh,vxyzu)
     endif
  enddo
  !$omp end parallel do
+ if (nboulders > 0) call drift_boulders(dt,npart,xyzh,vxyzu)
 
 end subroutine substep_sph
 
@@ -444,7 +449,8 @@ end subroutine substep
 subroutine drift(cki,dt,time_par,npart,nptmass,ntypes,xyzh,xyzmh_ptmass,vxyzu, &
                  vxyz_ptmass,fxyz_ptmass,gtgrad,n_group,n_ingroup,group_info, &
                  bin_info)
- use part, only:isdead_or_accreted,ispinx,ispiny,ispinz,igarg
+ use part, only:isdead_or_accreted,ispinx,ispiny,ispinz,igarg,iboulder,nboulders
+ use boulders, only:drift_boulders
  use ptmass,   only:ptmass_drift,use_regnbody
  use subgroup, only:subgroup_evolve
  use io  ,     only:id,master
@@ -467,9 +473,12 @@ subroutine drift(cki,dt,time_par,npart,nptmass,ntypes,xyzh,xyzmh_ptmass,vxyzu, &
  ! Drift gas particles
 
  !$omp parallel do default(none) &
- !$omp shared(npart,xyzh,vxyzu,ckdt) &
+ !$omp shared(npart,xyzh,vxyzu,ckdt,iboulder,nboulders) &
  !$omp private(i)
  do i=1,npart
+    if (nboulders > 0) then
+       if (iboulder(i) > 0) cycle   ! rigid boulders are moved by drift_boulders
+    endif
     if (.not.isdead_or_accreted(xyzh(4,i))) then
        xyzh(1,i) = xyzh(1,i) + ckdt*vxyzu(1,i)
        xyzh(2,i) = xyzh(2,i) + ckdt*vxyzu(2,i)
@@ -477,6 +486,7 @@ subroutine drift(cki,dt,time_par,npart,nptmass,ntypes,xyzh,xyzmh_ptmass,vxyzu, &
     endif
  enddo
  !$omp end parallel do
+ if (nboulders > 0) call drift_boulders(ckdt,npart,xyzh,vxyzu)
 
  ! Drift sink particles
  if (nptmass>0) then
@@ -507,7 +517,9 @@ end subroutine drift
 
 subroutine kick(dki,dt,npart,nptmass,ntypes,xyzh,pxyzu,xyzmh_ptmass,pxyz_ptmass, &
                 fext,fxyz_ptmass,dsdt_ptmass)
- use part,           only:isdead_or_accreted,iamtype,iamboundary,iphase,ispinx,ispiny,ispinz,igas,ndptmass
+ use part,           only:isdead_or_accreted,iamtype,iamboundary,iphase,ispinx,ispiny,ispinz,igas,ndptmass,&
+                          nboulders
+ use boulders,       only:kick_boulders_ext
  use ptmass,         only:ptmass_kick
  use io,             only:id,master
  use mpiutils,       only:bcast_mpi,reduce_in_place_mpi,reduceall_mpi
@@ -555,6 +567,10 @@ subroutine kick(dki,dt,npart,nptmass,ntypes,xyzh,pxyzu,xyzmh_ptmass,pxyz_ptmass,
     endif
  enddo
  !$omp end parallel do
+ !
+ ! kick rigid boulders with the external/sink forces on their particles
+ !
+ if (nboulders > 0) call kick_boulders_ext(dkdt,npart,xyzh,pxyzu,fext)
 
 end subroutine kick
 

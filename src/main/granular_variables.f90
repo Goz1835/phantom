@@ -23,6 +23,7 @@ module granular_variables
  character(len=12) :: ds_in, K_in, rhos_in
  
  public :: set_defaults_granular, write_options_granular, read_options_granular, set_reference_density_cgs, set_granular_K_kpa
+ public :: get_granular_K_code
 
  private
 
@@ -166,6 +167,21 @@ subroutine write_options_granular(iwritein)
    K_in = K_string
    K = in_code_units(K_string, ierr, 'pressure')
  end subroutine set_granular_K_kpa
+
+ !----------------------------------------------------------------
+ !+
+ !  bulk modulus converted with the current code units. K itself is
+ !  converted when the input file is read, which is before the units
+ !  are set from the dump file
+ !+
+ !----------------------------------------------------------------
+ real function get_granular_K_code()
+   use units,  only:in_code_units
+   integer :: ierr
+
+   get_granular_K_code = in_code_units(K_in, ierr, 'pressure')
+   if (ierr /= 0) get_granular_K_code = -1.
+ end function get_granular_K_code
 
 
 end module granular_variables

@@ -62,7 +62,7 @@ subroutine write_fulldump(t,dumpfile,ntotal,iorder,sphNG)
                    rad,rad_label,radprop,radprop_label,do_radiation,maxirad,maxradprop,itemp,igasP,igamma,&
                    iorig,iseed_sink,iX,iZ,imu,nucleation,nucleation_label,n_nucleation,tau,itau_alloc,tau_lucy,itauL_alloc,&
                    luminosity,eta_nimhd,eta_nimhd_label,apr_level,&
-                   rhomat,rhomat_label
+                   rhomat,rhomat_label,iboulder,iboulder_label,nboulders
  use part,  only:metrics,metricderivs,tmunus
  use options,    only:use_dustfrac,use_porosity,use_var_comp,icooling
  use dump_utils, only:tag,open_dumpfile_w,allocate_header,&
@@ -272,6 +272,7 @@ subroutine write_fulldump(t,dumpfile,ntotal,iorder,sphNG)
        if (inject_parts) call write_array(1,iseed_sink,'iseed_sink',npart,k,ipass,idump,nums,nerr)
        if (track_lum) call write_array(1,luminosity,'luminosity',npart,k,ipass,idump,nums,nerr)
        if (use_apr) call write_array(1,apr_level,'apr_level',npart,k,ipass,idump,nums,nerr)
+       if (nboulders > 0) call write_array(1,iboulder,iboulder_label,npart,k,ipass,idump,nums,nerr)
 
        if (use_krome) then
           call write_array(1,abundance,abundance_label,krome_nmols,npart,k,ipass,idump,nums,nerr)
@@ -483,7 +484,7 @@ subroutine read_dump(dumpfile,tfile,hfactfile,idisk1,iprint,id,nprocs,ierr,heade
  use io,       only:real4,master,iverbose,error,warning ! do not allow calls to fatal in this routine
  use part,     only:xyzh,vxyzu,massoftype,npart,npartoftype,maxtypes,iphase, &
                     maxphase,isetphase,nptmass,nsinkproperties,maxptmass,get_pmass, &
-                    xyzmh_ptmass,vxyz_ptmass
+                    xyzmh_ptmass,vxyz_ptmass,nboulders
  use dump_utils,   only:get_dump_size,skipblock,skip_arrays,check_tag,lenid,ndatatypes,read_header, &
                           open_dumpfile_r,get_error_text,ierr_realsize,free_header,read_block_header,&
                           get_blocklimits
@@ -514,6 +515,7 @@ subroutine read_dump(dumpfile,tfile,hfactfile,idisk1,iprint,id,nprocs,ierr,heade
  opened_full_dump = .true.
  dt_read_in = .false.
  got_evolve_dens =.false.
+ nboulders = 0
  !
  ! open dump file
  !
@@ -973,7 +975,7 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
                         rad,rad_label,radprop,radprop_label,do_radiation,maxirad,maxradprop,ifluxx,ifluxy,ifluxz, &
                         nucleation,nucleation_label,n_nucleation,ikappa,tau,itau_alloc,tau_lucy,itauL_alloc,&
                         ithick,ilambda,iorig,iseed_sink,dt_in,krome_nmols,T_gas_cool,apr_level,&
-                        rhomat,rhomat_label
+                        rhomat,rhomat_label,iboulder,iboulder_label,nboulders
  use eos_stamatellos, only:ttherm_store,ueqi_store,tau_store,du_store
  use sphNGutils, only:mass_sphng,got_mass,set_gas_particle_mass
  use options,    only:use_porosity
@@ -992,6 +994,7 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
  logical               :: got_psi,got_Tdust,got_dustprop(2),got_VrelVf(3),got_dustgasprop(4),got_iseed_sink
  logical               :: got_filfac,got_divcurlv(4),got_rad(maxirad),got_radprop(maxradprop),got_pxyzu(4)
  logical                :: got_iorig,got_apr_level,got_taumean,got_ueqi,got_dudt,got_ttherm
+ logical                :: got_iboulder
  character(len=lentag) :: tag,tagarr(64)
  integer :: k,i,iarr,ik,ndustfraci
  real, allocatable :: tmparray(:)
@@ -1034,6 +1037,8 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
  got_taumean     = .false.
  got_ttherm      = .false.
  got_dudt        = .false.
+ got_iboulder    = .false.
+ iboulder(i1:i2) = 0
 
  ndustfraci = 0
  if (use_dust .or. mhd) allocate(tmparray(max(size(dustfrac,2),size(Bevol,2))))
@@ -1085,6 +1090,7 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
              if (use_apr) then
                 call read_array(apr_level,'apr_level',got_apr_level,ik,i1,i2,noffset,idisk1,tag,match,ierr)
              endif
+             call read_array(iboulder,iboulder_label,got_iboulder,ik,i1,i2,noffset,idisk1,tag,match,ierr)
              if (do_nucleation) then
                 call read_array(nucleation,nucleation_label,got_nucleation,ik,i1,i2,noffset,idisk1,tag,match,ierr)
              endif
@@ -1150,6 +1156,7 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
 
  enddo over_arraylengths
  if (allocated(tmparray)) deallocate(tmparray)
+ if (got_iboulder .and. i2 >= i1) nboulders = max(nboulders,int(maxval(iboulder(i1:i2))))
  !
  ! check for errors
  !

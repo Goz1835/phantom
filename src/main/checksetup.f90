@@ -498,6 +498,10 @@ subroutine check_setup(nerror,nwarn,restart)
 !
  call check_HIIRegion(nerror)
 !
+!--check rigid boulders
+!
+ call check_setup_boulders(nerror)
+!
 !--check cooling prescriptions
 !
  call check_cooling(xcom,vcom,nerror)
@@ -1216,5 +1220,66 @@ subroutine check_HIIRegion(nerror)
     nerror = nerror + 1
  endif
 end subroutine check_HIIRegion
+
+!------------------------------------------------------------------
+!+
+! check the setup of rigid boulders made of boundary particles
+!+
+!------------------------------------------------------------------
+subroutine check_setup_boulders(nerror)
+ use dim,                only:maxp,mpi,ind_timesteps,gr,use_apr
+ use part,               only:npart,xyzh,iphase,iamtype,iboundary,igas,massoftype,maxphase,&
+                               iboulder,nboulders,isdead_or_accreted
+ use granular_variables, only:kbulk=>K
+ integer, intent(inout) :: nerror
+ integer :: i,k,nmax,nwrongtype
+ integer, allocatable :: np(:)
+
+ nmax = 0
+ if (npart > 0) nmax = maxval(iboulder(1:npart))
+ if (nboulders <= 0 .and. nmax <= 0) return
+
+ if (nmax > nboulders .or. minval(iboulder(1:npart)) < 0) then
+    print*,'Error in setup: boulder ids out of range: max id = ',nmax,' nboulders = ',nboulders
+    nerror = nerror + 1
+    return
+ endif
+ allocate(np(nboulders))
+ np = 0
+ nwrongtype = 0
+ do i=1,npart
+    k = iboulder(i)
+    if (k <= 0 .or. isdead_or_accreted(xyzh(4,i))) cycle
+    np(k) = np(k) + 1
+    if (maxphase==maxp) then
+       if (iamtype(iphase(i)) /= iboundary) nwrongtype = nwrongtype + 1
+    endif
+ enddo
+ if (nwrongtype > 0) then
+    print*,'Error in setup: ',nwrongtype,' boulder particles are not boundary particles'
+    nerror = nerror + 1
+ endif
+ if (any(np <= 0)) then
+    print*,'Error in setup: some boulders have no particles'
+    nerror = nerror + 1
+ endif
+ if (massoftype(iboundary) <= 0.) then
+    print*,'Error in setup: boulder particles have zero mass (massoftype(iboundary) = 0)'
+    nerror = nerror + 1
+ endif
+ if (abs(massoftype(iboundary) - massoftype(igas)) > 1.e-12*massoftype(igas)) then
+    print*,'Error in setup: rigid boulders need massoftype(iboundary) = massoftype(igas)'
+    nerror = nerror + 1
+ endif
+ if (mpi .or. ind_timesteps .or. gr .or. use_apr) then
+    print "(/,a,/)",'Error in setup: rigid boulders are not implemented with MPI, IND_TIMESTEPS, GR or APR'
+    nerror = nerror + 1
+ endif
+ if (kbulk <= 0.) then
+    print "(/,a,/)",'Error in setup: rigid boulders need the granular bulk modulus K > 0 (ieos=26)'
+    nerror = nerror + 1
+ endif
+
+end subroutine check_setup_boulders
 
 end module checksetup

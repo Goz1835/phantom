@@ -25,6 +25,8 @@ module setup
 !   - scale_earth_sep : *scale geocentric Earth–Apophis separation (1=ephemeris; requires apophis_only=F)*
 !   - apophis_spin_axis_x/y/z : *Apophis spin axis direction (normalized)*
 !   - apophis_spin_torque_align_deg : *spin axis in Earth-Apophis orbit plane (deg; -1=use axis vector)*
+!   - n_boulders : *number of rigid boulders inside apophis (0=none; 1=at the centre; >1=spread evenly)*
+!   - r_boulder  : *radius of each rigid boulder (km)*
 !
 ! :Dependencies: centreofmass, eos_tillotson, infile_utils, io, kernel,
 !   options, part, physcon, setbinary, setsolarsystem, setup_params,
@@ -52,6 +54,8 @@ module setup
  real :: apophis_spin_period
  real :: apophis_spin_axis(3)
  real :: apophis_spin_torque_align_deg ! torque-align angle (deg); -1 = use apophis_spin_axis_*
+ integer :: n_boulders                 ! number of rigid boulders (Bui & Nguyen 2021, sec. 4.4)
+ real    :: r_boulder                  ! radius of each boulder (km = code units)
 
  private
 
@@ -85,6 +89,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use infile_utils,  only:get_options
  use viscosity,     only:irealvisc
  use ptmass,        only:isink_potential
+ use setboulders,   only:set_boulders
  integer,           intent(in)    :: id
  integer,           intent(inout) :: npart
  integer,           intent(out)   :: npartoftype(:)
@@ -133,6 +138,8 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  apophis_spin_period = 0.
  apophis_spin_axis   = (/ 0., 0., 1. /)
  apophis_spin_torque_align_deg = -1.
+ n_boulders = 0
+ r_boulder  = 0.02
 !
 ! read runtime parameters from setup file
 !
@@ -142,6 +149,10 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  call get_options(trim(fileprefix)//'.setup',id==master,ierr,&
                   read_setupfile,write_setupfile)
  if (ierr /= 0) stop 'rerun phantomsetup after editing .setup file'
+ if (n_boulders > 0 .and. np_apophis <= 1) &
+    call fatal('setup_solarsystem','rigid boulders need apophis made of SPH particles (np_apophis > 1)')
+ if (n_boulders > 0 .and. .not.use_granular) &
+    call fatal('setup_solarsystem','rigid boulders need use_granular=T (contact stiffness uses the bulk modulus K)')
 !
 ! set units
 !
@@ -305,12 +316,23 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
           vxyzu(1:3,i) = vxyz_ptmass(1:3,nptmass)
        enddo
        ! set mass of apophis based on the rho we target, and the volume calculated
+       if (apophis_v <= 0.) call fatal('setup_solarsystem',&
+          'volume of apophis from set_shape is zero: check apophis_shape_file')
        m_apophis = rhos * apophis_v
        massoftype(igas) = m_apophis / npart
        npartoftype(igas) = npart
        nptmass = nptmass - 1
        i_apophis_first = 0 !initialize apophis sink index range to 0 before know if DEM used
        i_apophis_last  = 0 !initialize apophis sink index range to 0 before know if DEM used
+
+       !
+       ! convert particles inside apophis into rigid boulders made of boundary particles
+       !
+       if (n_boulders > 0) then
+          if (use_dem) call fatal('setup_solarsystem','rigid boulders cannot be used with use_dem')
+          call set_boulders(n_boulders,r_boulder,1,npart,xyzh,npartoftype,massoftype,hfact,ierr)
+          if (ierr /= 0) call fatal('setup_solarsystem','could not set up rigid boulders')
+       endif
 
        if (use_dem) then
           call replace_gas_with_dem(id,npart,npartoftype(igas),massoftype(igas),&
@@ -733,6 +755,9 @@ subroutine write_setupfile(filename)
  call write_inopt(apophis_spin_axis(3),'apophis_spin_axis_z','Apophis spin axis, z component',iunit)
  call write_inopt(apophis_spin_torque_align_deg,'apophis_spin_torque_align_deg',&
    'spin axis in Earth-Apophis orbit plane (deg; -1=use axis vector)',iunit)
+ call write_inopt(n_boulders,'n_boulders',&
+   'number of rigid boulders inside apophis (0=none; 1=at the centre; >1=spread evenly)',iunit)
+ call write_inopt(r_boulder,'r_boulder','radius of each rigid boulder (km)',iunit)
 
  close(iunit)
 
@@ -780,6 +805,8 @@ subroutine read_setupfile(filename,ierr)
  call read_inopt(apophis_spin_axis(2),'apophis_spin_axis_y',db,errcount=nerr)
  call read_inopt(apophis_spin_axis(3),'apophis_spin_axis_z',db,errcount=nerr)
  call read_inopt(apophis_spin_torque_align_deg,'apophis_spin_torque_align_deg',db,default=-1.0,errcount=nerr)
+ call read_inopt(n_boulders,'n_boulders',db,min=0,max=127,default=0,errcount=nerr)
+ call read_inopt(r_boulder,'r_boulder',db,min=0.,default=r_boulder,errcount=nerr)
 
  call close_db(db)
 

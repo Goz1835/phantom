@@ -63,6 +63,8 @@ subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
  use radiation_implicit, only:do_radiation_implicit,ierr_failed_to_converge
  use options,        only:implicit_radiation,implicit_radiation_store_drad,use_porosity,need_pressure_on_sinks
  use HIIRegion,      only:HIIupdateflag,iH2R,HII_feedback
+ use part,           only:nboulders
+ use boulders,       only:get_boulder_forces
  integer,         intent(in)    :: icall
  integer,         intent(inout) :: npart
  integer,         intent(in)    :: nactive
@@ -91,6 +93,7 @@ subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
  integer(kind=1), intent(in)    :: apr_level(:)
  integer                     :: ierr,i
  real(kind=4)                :: t1,tcpu1,tlast,tcpulast
+ real                        :: dtboulder
 
  t1    = 0.
  tcpu1 = 0.
@@ -193,6 +196,14 @@ subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
             ipart_rhomax,dt,stressmax,eos_vars,dens,metrics,apr_level,&
             drhomatdt)
  call do_timing('force',tlast,tcpulast)
+ !
+ ! contact forces on rigid boulders and their total force and torque
+ !
+ dtboulder = huge(dtboulder)
+ if (nboulders > 0) then
+    call get_boulder_forces(npart,xyzh,vxyzu,fxyzu,dtboulder)
+    call do_timing('boulders',tlast,tcpulast)
+ endif
 
  !
  ! compute growth rate of dust particles
@@ -227,7 +238,7 @@ subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
  if (ind_timesteps) then
     dtnew = dtmax/2.**nbinmax  ! minimum timestep over all particles
  else
-    dtnew = min(dtforce,dtcourant,dtrad,dtmax)
+    dtnew = min(dtforce,dtcourant,dtrad,dtmax,dtboulder)
  endif
 
  call do_timing('total',t1,tcpu1,lunit=iprint)

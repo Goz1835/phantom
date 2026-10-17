@@ -53,6 +53,7 @@ module forces
  use neighkdtree, only:leaf_is_active
  use kdtree,      only:inodeparts,inoderange
  use part,        only:iradxi,ifluxx,ifluxy,ifluxz,ikappa,ien_type,ien_entropy,ien_entropy_s
+ use part,        only:iboulder,nboulders
 
  implicit none
 
@@ -2274,6 +2275,13 @@ subroutine start_cell(cell,iphase,xyzh,vxyzu,gradh,divcurlv,divcurlB,dvdx,Bevol,
        iamgasi  = .true.
        iamsinki = .false.
     endif
+    if (nboulders > 0 .and. .not.iactivei .and. .not.iamsinki) then
+       if (iboulder(i) > 0) then   ! rigid boulder particle: compute gravity only
+          iactivei = .true.
+          iamgasi  = .false.
+          iamdusti = .false.
+       endif
+    endif
     if (.not.iactivei .and. .not. (do_radiation .and. implicit_radiation)) then ! handles boundaries + case where first particle in cell is inactive
        cycle over_parts
     endif
@@ -2614,6 +2622,13 @@ subroutine compute_cell(cell,listneigh,nneigh,Bevol,xyzh,vxyzu,fxyzu, &
        iamsinki = .false.
     endif
 
+    if (nboulders > 0 .and. .not.iactivei .and. .not.iamsinki) then
+       if (iboulder(inodeparts(cell%arr_index(ip))) > 0) then   ! rigid boulder particle: gravity only
+          iactivei = .true.
+          iamgasi  = .false.
+          iamdusti = .false.
+       endif
+    endif
     if (.not.iactivei .and. .not. (do_radiation .and. implicit_radiation)) then ! handles case where first particle in cell is inactive
        cycle over_parts     ! also boundary particles are inactive
     endif
@@ -2812,6 +2827,13 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
        iamsinki = .false.
     endif
 
+    if (nboulders > 0 .and. .not.iactivei .and. .not.iamsinki) then
+       if (iboulder(inodeparts(cell%arr_index(ip))) > 0) then   ! rigid boulder particle: gravity only
+          iactivei = .true.
+          iamgasi  = .false.
+          iamdusti = .false.
+       endif
+    endif
     if (.not.iactivei .and. .not. (do_radiation .and. implicit_radiation)) then ! handles case where first particle in cell is inactive
        cycle over_parts
     endif

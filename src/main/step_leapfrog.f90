@@ -133,6 +133,8 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
  use eos,             only:equationofstate
  use substepping,     only:substep,substep_gr,substep_sph_gr,substep_sph
  use ptmass,         only:ptmass_kick
+ use part,           only:nboulders
+ use boulders,       only:kick_boulders,predict_boulders,correct_boulders,set_boulder_vpred
  integer, intent(inout) :: npart
  integer, intent(in)    :: nactive
  real,    intent(in)    :: t,dtsph
@@ -237,6 +239,10 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
     endif
  enddo predictor
  !$omp end parallel do
+ !
+ ! rigid boulders: half kick with the "slow" forces (eqs. 133-134)
+ !
+ if (nboulders > 0) call kick_boulders(hdtsph,npart,vxyzu)
 
  !
  ! 1st ptmass kick (sink-gas)
@@ -405,6 +411,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
     endif
  enddo predict_sph
  !$omp end parallel do
+ if (nboulders > 0) call predict_boulders(hdtsph,npart,vpred)
  if (use_dustgrowth) then
     if (use_porosity) then
        call get_filfac(npart,xyzh,dustprop(1,:),filfacpred,dustproppred,hdti)
@@ -641,6 +648,8 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
        call check_dustprop(npart,dustprop,filfac,mprev,filfacprev)
     endif
 
+    if (nboulders > 0) call correct_boulders(hdtsph,npart,xyzh,vxyzu,vpred,errmax,v2mean,np)
+
     if (gr) then
        call check_velocity_error(errmax,p2mean,np,its,tolv,dtsph,timei,idamp,dterr,errmaxmean,converged)
     else
@@ -714,6 +723,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
           endif
        enddo until_converged
 !$omp end parallel do
+       if (nboulders > 0) call set_boulder_vpred(npart,vxyzu,vpred)
 
        if (use_dustgrowth) then
           if (use_porosity) then

@@ -115,7 +115,8 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
                             iamtype,igas,nptmass,xyzmh_ptmass,vxyz_ptmass,&
                             xyzh,vxyzu,ibin,ibin_old,ibin_wake,ibelong,&
                             rhomat,drhomatdt,&
-                            isdead_or_accreted
+                            isdead_or_accreted,nboulders
+ use boulders,         only:init_boulders
  use partinject,       only:update_injected_particles
  use readwrite_dumps,  only:dt_read_in
  use timing,           only:get_timings
@@ -204,6 +205,9 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
 
  ! set initial chemical abundance values
  call initialise_krome()
+
+ ! set up the rigid-body state of any boulders from their particles
+ if (nboulders > 0) call init_boulders(npart,xyzh,vxyzu)
 
  ! calculate initial derivatives (density, SPH forces, etc.)
  call get_derivs_initial(time,dumpfile,ntot,dtnew_first,ierr)
@@ -480,7 +484,7 @@ subroutine initialise_external_forces_and_gr(time,dtextforce,ierr)
  use dim,            only:gr,maxp,maxphase
  use io,             only:iprint,id,master,fatal
  use part,           only:npart,xyzh,vxyzu,fext,iphase,iamtype,iboundary,&
-                          isdead_or_accreted,dens,metrics,metricderivs,pxyzu
+                          isdead_or_accreted,dens,metrics,metricderivs,pxyzu,iboulder
  use cons2prim,      only:prim2consall
  use deriv,          only:get_density_global
  use externalforces, only:initialise_externalforces,externalforce,&
@@ -540,12 +544,12 @@ subroutine initialise_external_forces_and_gr(time,dtextforce,ierr)
     if (id==master) write(iprint,*) 'dt(extforce)  = ',dtextforce
  endif
 
- !-- Set external force to zero on boundary particles
+ !-- Set external force to zero on boundary particles (except rigid boulders, which feel it)
  if (maxphase==maxp) then
 !$omp parallel do default(none) &
-!$omp shared(npart,fext,iphase) private(i)
+!$omp shared(npart,fext,iphase,iboulder) private(i)
     do i=1,npart
-       if (iamtype(iphase(i))==iboundary) fext(:,i)=0.
+       if (iamtype(iphase(i))==iboundary .and. iboulder(i)==0) fext(:,i)=0.
     enddo
 !$omp end parallel do
  endif

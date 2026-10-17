@@ -63,7 +63,8 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
  use gravwaveutils,    only:write_options_gravitationalwaves
  use radiation_utils,  only:write_options_radiation
  use dim,              only:maxvxyzu,maxptmass,gravity,sink_radiation,gr,use_apr
- use part,             only:mhd,nptmass
+ use part,             only:mhd,nptmass,nboulders
+ use boulders,         only:write_options_boulders
  use boundary_dyn,     only:write_options_boundary
  use HIIRegion,        only:write_options_H2R
  use viscosity,        only:write_options_viscosity
@@ -123,6 +124,7 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
  call write_options_externalforces(iwritein,iexternalforce)
 
  if (.not. disc_viscosity) call write_options_viscosity(iwritein)
+ if (nboulders > 0) call write_options_boulders(iwritein)
 
  if (driving) call write_options_forcing(iwritein)
  if (use_dust) call write_options_dust(iwritein)
@@ -303,6 +305,7 @@ subroutine read_options_from_db(db,nerr,logfile,dumpfile,evfile)
  use boundary_dyn,     only:read_options_boundary
  use HIIRegion,        only:read_options_H2R
  use viscosity,        only:read_options_viscosity
+ use boulders,         only:read_options_boulders
  use mcfost_utils,     only:read_options_mcfost
  use shock_capturing,  only:read_options_shock_capturing
  use io_control,       only:read_options_iocontrol
@@ -330,6 +333,7 @@ subroutine read_options_from_db(db,nerr,logfile,dumpfile,evfile)
  call read_options_shock_capturing(db,nerr)
  call read_options_damping(db,nerr)
  if (.not. disc_viscosity) call read_options_viscosity(db,nerr)
+ call read_options_boulders(db,nerr)
  !
  ! thermodynamics
  !
