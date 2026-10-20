@@ -35,16 +35,18 @@ real function granularshearfunc(strain, granularpressure, rho1i)
  use granular_variables,    only: ds,mus,mu2,I0,rhos
 
  real, intent(in) :: strain(6), granularpressure, rho1i
- real :: I, muI, epsilondotcolon
+ real :: I, muI, gammadot
 
  ! -- mu I model
  ! Go through how shear viscosity should be calculated in the mu I model
  ! NOTE this gives eta/rho (a value called nu in Price 2018)
 
- epsilondotcolon = strain(1)**2 + 2 * strain(2)**2 + 2 * strain(3)**2 + strain(4)**2 + 2*strain(5)**2 + strain(6)**2
+ ! strain is gammadot_ij = dv_i/dx_j + dv_j/dx_i (= 2*epsilondot_ij, see strain_from_dvdx),
+ ! so the shear rate is |gammadot| = sqrt(0.5*gammadot:gammadot) = sqrt(2*epsilondot:epsilondot)
+ gammadot = sqrt(0.5*(strain(1)**2 + 2.*strain(2)**2 + 2.*strain(3)**2 + strain(4)**2 + 2.*strain(5)**2 + strain(6)**2))
 
  if(granularpressure > 0) then
-   I = ds * (2 * epsilondotcolon) ** (0.5) / (granularpressure/rhos)**(0.5)
+   I = ds * gammadot / (granularpressure/rhos)**(0.5)
 
    ! If I is very low or zero, then muI --> mus
    if(I == 0) then
@@ -54,8 +56,8 @@ real function granularshearfunc(strain, granularpressure, rho1i)
    endif
    
    ! Ensure no division by zero if the strain rate is zero
-   if(epsilondotcolon /= 0) then
-    granularshearfunc = muI * granularpressure / (2 * epsilondotcolon) ** (0.5) * rho1i
+   if(gammadot /= 0) then
+    granularshearfunc = muI * granularpressure / gammadot * rho1i
    else
     granularshearfunc = 0
    endif

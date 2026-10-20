@@ -23,6 +23,7 @@ module granular_variables
  character(len=12) :: ds_in, K_in, rhos_in
  
  public :: set_defaults_granular, write_options_granular, read_options_granular, set_reference_density_cgs, set_granular_K_kpa
+ public :: init_granular
 
  private
 
@@ -34,36 +35,29 @@ contains
 !+
 !----------------------------------------------------------------
 subroutine set_defaults_granular
-   use units, only:in_code_units, unit_density
-   use physcon, only:g_per_cc
-
-   integer :: ierr
 
    ! Units that don't call 'in_code_units' are unitless.
    ! The importance of these values is taken from Bui 2021 (eqn 64 and 65)
    ! The default values are for glass balls, taken from Jop et al., 2006
-   
+
    ! Original values from Forterre 2003
    mus = 0.38 ! static friction coefficient, unitless
    mu2 = 0.64 ! critical friction angle at high I, unitless
    I0 = 0.279 ! a material constant (unnamed?), unitless
 
-   ds_in = '0.053*cm' ! grain diameter   
-   ds = in_code_units(ds_in, ierr, 'length')
-   ierr = 0
-   
+   ! Dimensional values are stored as strings and only converted to code units
+   ! in init_granular, once the units are known (i.e. after the dump is read)
+   ds_in = '0.053*cm' ! grain diameter
+   ds = -1.
+
    ! Set the default of rhos to be -1, as it then needs to be set by the setup
    ! A recommended value would be setting this to 2.5
    rhos_in = '-1.0*g/cm^3'
-   rhos = in_code_units(rhos_in, ierr, 'density')
-   ierr = 0
-   print*,rhos," rhos granular_variables",rhos*unit_density
+   rhos = -1.  ! negative flags "not set" to check_setup
 
    ! Following values need to be calibrated and are estimates roughly by Ha Bui
    K_in = '-1.0*kpa'
-   K = in_code_units(K_in, ierr, 'pressure')
-   ierr = 0
-   print*,K," K granular_variables",K*unit_density
+   K = -1.  ! negative flags "not set" to check_setup
 
 end subroutine set_defaults_granular
 
@@ -94,14 +88,12 @@ subroutine write_options_granular(iwritein)
  !+
  !----------------------------------------------------------------
  subroutine read_options_granular(db,nerr)
-  use io,           only:error
   use infile_utils, only:inopts,read_inopt
-  use units,        only:in_code_units, unit_density, unit_pressure
   type(inopts), intent(inout) :: db(:)
   integer,      intent(inout) :: nerr
-  character(len=*), parameter :: label = 'read_infile'
-  integer :: ierr = 0
- 
+
+  ! Only the strings are read here: the units are not known yet when the
+  ! infile is read, so the conversion to code units is done in init_granular
   call read_inopt(ds_in,'ds',db,errcount=nerr)
   call read_inopt(rhos_in,'rhos',db,errcount=nerr)
   call read_inopt(K_in,'K',db,errcount=nerr)
@@ -109,31 +101,43 @@ subroutine write_options_granular(iwritein)
   call read_inopt(mu2,'mu2',db,errcount=nerr,min=0.,max=1.,default=mu2)
   call read_inopt(I0,'I0',db,errcount=nerr,min=0.,max=1.,default=I0)
   call read_inopt(mus,'mus',db,errcount=nerr,min=0.,max=1.,default=mus)
- 
-  ds = in_code_units(ds_in, ierr, 'length')
-  if (ierr /= 0) then
-     call error(label,'could not convert units of length for ds')
-     nerr = nerr + 1
-  endif  
-  ierr = 0
-
-  ! Convert rhos into code units from the cgs version
-  rhos = in_code_units(rhos_in, ierr, 'density')
-  if (ierr /= 0) then
-     print*, 'rhos_in = ',rhos_in
-     call error(label,'could not convert units of density for rhos')
-     nerr = nerr + 1
-  endif  
-  ierr = 0
-
-  K = in_code_units(K_in, ierr, 'pressure')
-  if (ierr /= 0) then
-     call error(label,'could not convert units of pressure for K')
-     nerr = nerr + 1
-  endif  
-  ierr = 0
 
  end subroutine read_options_granular
+
+ !----------------------------------------------------------------
+ !+
+ !  convert the granular parameters to code units
+ !  (must be called AFTER the units are known, i.e. after the dump is read)
+ !+
+ !----------------------------------------------------------------
+ subroutine init_granular(ierr)
+  use io,           only:error
+  use units,        only:in_code_units
+  integer, intent(out) :: ierr
+  character(len=*), parameter :: label = 'init_granular'
+  integer :: ierr1
+
+  ierr = 0
+
+  ds = in_code_units(ds_in, ierr1, 'length')
+  if (ierr1 /= 0) then
+     call error(label,'could not convert units of length for ds = '//trim(ds_in))
+     ierr = ierr + 1
+  endif
+
+  rhos = in_code_units(rhos_in, ierr1, 'density')
+  if (ierr1 /= 0) then
+     call error(label,'could not convert units of density for rhos = '//trim(rhos_in))
+     ierr = ierr + 1
+  endif
+
+  K = in_code_units(K_in, ierr1, 'pressure')
+  if (ierr1 /= 0) then
+     call error(label,'could not convert units of pressure for K = '//trim(K_in))
+     ierr = ierr + 1
+  endif
+
+ end subroutine init_granular
 
  !----------------------------------------------------------------
  !+

@@ -124,7 +124,6 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
  use writeheader,      only:write_header
  use metric,           only:update_metric
  use granular_variables,         only:rhos
- use units,             only:unit_density
  character(len=*), intent(inout) :: infile
  character(len=*), intent(out)   :: logfile,evfile,dumpfile
  logical,          intent(in), optional :: noread
@@ -209,14 +208,15 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
  call get_derivs_initial(time,dumpfile,ntot,dtnew_first,ierr)
  if (ierr /= 0) call fatal('initial','error in derivatives setup')
 
- ! set initial value of the evolved density to be the density in granular
+ ! set initial value of the evolved density to be the density in granular,
+ ! but only where it was not already set by the setup or read from the dump (restarts)
  if (do_evolveddensity) then
     do i=1,npart
        !might not need the isdead check
        if (isdead_or_accreted(xyzh(4,i))) then
           rhomat(i) = 0.
-       else
-          rhomat(i) = rhos / unit_density
+       elseif (rhomat(i) <= 0.) then
+          rhomat(i) = rhos
        endif
        drhomatdt(i) = 0.
     enddo
@@ -278,6 +278,7 @@ subroutine read_infile_and_initial_conditions(infile,logfile,evfile,dumpfile,tim
  use io,               only:fatal,warning
  use dim,              only:idumpfile,gr
  use metric,           only:update_metric
+ use granular_variables, only:init_granular
  character(len=*), intent(inout) :: infile,logfile,evfile,dumpfile
  real,             intent(out)   :: time
  integer,          intent(out)   :: ierr
@@ -305,6 +306,10 @@ subroutine read_infile_and_initial_conditions(infile,logfile,evfile,dumpfile,tim
  ! read particle setup from dumpfile
  call read_dump(trim(dumpfile),time,hfactfile,idisk1,iprint,id,nprocs,ierr)
  if (ierr /= 0) call fatal('initial','error reading dumpfile')
+
+ ! convert granular parameters now that the units are known (must be before check_setup)
+ call init_granular(ierr)
+ if (ierr /= 0) call fatal('initial','could not convert granular parameters to code units')
 
  if (gr) call update_metric(time)
 

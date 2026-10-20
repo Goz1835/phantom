@@ -52,14 +52,14 @@ end subroutine init_eos_incomp
 !-----------------------------------------------------------------------
 subroutine equationofstate_incomp(rho,pressure,spsound,gamma)
  use granular_variables,    only: rhos,K
- real, intent(inout) :: rho
+ real, intent(in)    :: rho
  real, intent(out)   :: pressure, spsound, gamma
 
  real :: rhos_inv
 
- ! Everything has been input in cgs
+ ! Everything is in code units: rho, rhos and K (rhos and K are converted in init_granular)
 
- rhos_inv = 1. / rhos ! rho s is already in code units, so just need to get the inverse
+ rhos_inv = 1. / rhos
  pressure = K * (rho * rhos_inv - 1.)
  gamma = 1.
  spsound = sqrt(K * rhos_inv)
@@ -73,11 +73,14 @@ end subroutine equationofstate_incomp
 !----------------------------------------------------------------
 subroutine eos_info_incomp(iprint)
  use granular_variables,    only: rhos,K
+ use units,                 only: unit_density,unit_pressure
  integer, intent(in) :: iprint
 
  write(iprint,"(/,a)") ' Incompressible EoS'
- write(iprint,"(a,1pg10.3,a)") '  rhos = ',rhos,' g/cm^3 [solid density of material]'
- write(iprint,"(a,1pg10.3,a)") '    K = ',K, ' unitless  [bulk elastic modulus of material]'
+ write(iprint,"(a,1pg10.3,a,1pg10.3,a)") '  rhos = ',rhos,' (code units) = ',rhos*unit_density,&
+                                          ' g/cm^3 [solid density of material]'
+ write(iprint,"(a,1pg10.3,a,1pg10.3,a)") '    K = ',K,' (code units) = ',K*unit_pressure,&
+                                          ' dyn/cm^2 [bulk elastic modulus of material]'
 
 end subroutine eos_info_incomp
 

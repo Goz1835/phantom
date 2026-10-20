@@ -163,7 +163,6 @@ subroutine equationofstate(eos_type,ponrhoi,spsoundi,rhoi,xi,yi,zi,tempi,eni,gam
  real    :: mass_r, mass ! defined for generalised Farris prescription
  real    :: gammai,temperaturei,mui,imui,X_i,Z_i
  real    :: cgsrhoi,cgseni,cgspresi,presi,gam1,cgsspsoundi
- real    :: cgsrhomati
  real    :: uthermconst,kappaBar,kappaPart
  real    :: enthi,pondensi
  !
@@ -545,13 +544,10 @@ subroutine equationofstate(eos_type,ponrhoi,spsoundi,rhoi,xi,yi,zi,tempi,eni,gam
     spsoundi = cgsspsoundi / unit_velocity
     tempi = 0.
  case (26)
-    !Give the function everything in cgs to ensure the values work correctly
-    cgsrhoi = rhoi * unit_density
-    cgsrhomati = rhomati * unit_density
-    !cgseni  = eni * unit_ergg
-    call equationofstate_incomp(cgsrhomati,cgspresi,cgsspsoundi,gammai)
-    ponrhoi  = real(cgspresi / (unit_pressure * rhomati))
-    spsoundi = real(cgsspsoundi / unit_velocity)
+    ! rhos and K are in code units (see init_granular), so evaluate the EoS in code units.
+    ! Divide by rhoi (not rhomati) so that P = ponrhoi*rhoi is exactly the EoS pressure
+    call equationofstate_incomp(rhomati,presi,spsoundi,gammai)
+    ponrhoi = presi/rhoi
 
  case default
     spsoundi = 0. ! avoids compiler warnings
