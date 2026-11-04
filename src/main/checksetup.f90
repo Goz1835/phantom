@@ -128,6 +128,10 @@ subroutine check_setup(nerror,nwarn,restart)
        if (id==master) print*,'ERROR: incomp EOS (ieos==26) requires evolved density: compile with GRANULAR=yes'
        nerror = nerror + 1
     endif
+    if (maxvxyzu >= 4) then
+       if (id==master) print*,'ERROR: incomp EOS (ieos==26) requires an isothermal build: compile with ISOTHERMAL=yes'
+       nerror = nerror + 1
+    endif
     if (rhos < 0.) then
        if (id==master) print*,'ERROR: when using incomp EOS (ieos==26), rhos must be set in setup set_granular_density'
        nerror = nerror + 1

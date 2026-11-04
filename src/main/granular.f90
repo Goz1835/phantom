@@ -147,7 +147,7 @@ subroutine write_options_granular(iwritein)
  !----------------------------------------------------------------
  subroutine set_granular_density(rhos_string)
    use units,  only:in_code_units
-   character(len=12) :: rhos_string
+   character(len=*), intent(in) :: rhos_string
    integer :: ierr
 
    ! This subroutine is for setting rhos from outside of the file (e.g, setting it in the setup)
@@ -163,7 +163,7 @@ subroutine write_options_granular(iwritein)
  !----------------------------------------------------------------
  subroutine set_granular_K(K_string)
    use units,  only:in_code_units
-   character(len=12) :: K_string
+   character(len=*), intent(in) :: K_string
    integer :: ierr
 
    ! This subroutine is for setting K from outside of the file (e.g, setting it in the setup)

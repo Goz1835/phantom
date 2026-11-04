@@ -389,7 +389,7 @@ subroutine cons2prim_everything(npart,xyzh,vxyzu,dvdx,rad,eos_vars,radprop,&
                                gamma_local=gammai,mu_local=mui,Xlocal=X_i,Zlocal=Z_i,rhomati=rhomati)
        else
           !isothermal
-          call equationofstate(ieos,p_on_rhogas,spsound,rhogas,xi,yi,zi,temperaturei,mu_local=mui)
+          call equationofstate(ieos,p_on_rhogas,spsound,rhogas,xi,yi,zi,temperaturei,mu_local=mui,rhomati=rhomati)
        endif
 
        eos_vars(igasP,i)  = p_on_rhogas*rhogas

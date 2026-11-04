@@ -164,7 +164,7 @@ subroutine equationofstate(eos_type,ponrhoi,spsoundi,rhoi,xi,yi,zi,tempi,eni,gam
  real    :: gammai,temperaturei,mui,imui,X_i,Z_i
  real    :: cgsrhoi,cgseni,cgspresi,presi,gam1,cgsspsoundi
  real    :: uthermconst,kappaBar,kappaPart
- real    :: enthi,pondensi
+ real    :: enthi,pondensi,rhomatii
  !
  ! Check to see if equation of state is compatible with GR cons2prim routines
  !
@@ -546,7 +546,13 @@ subroutine equationofstate(eos_type,ponrhoi,spsoundi,rhoi,xi,yi,zi,tempi,eni,gam
  case (26)
     ! rhos and K are in code units (see init_granular), so evaluate the EoS in code units.
     ! Divide by rhoi (not rhomati) so that P = ponrhoi*rhoi is exactly the EoS pressure
-    call equationofstate_incomp(rhomati,presi,spsoundi,gammai)
+    ! Callers without the evolved density (e.g. get_spsound, tests) fall back to rhoi
+    if (present(rhomati)) then
+       rhomatii = rhomati
+    else
+       rhomatii = rhoi
+    endif
+    call equationofstate_incomp(rhomatii,presi,spsoundi,gammai)
     ponrhoi = presi/rhoi
 
  case default
@@ -1547,7 +1553,7 @@ logical function eos_requires_isothermal(ieos)
  integer, intent(in) :: ieos
 
  select case(ieos)
- case(1,3,6,7,8,13,14,21)
+ case(1,3,6,7,8,13,14,21,26)
     eos_requires_isothermal = .true.
  case default
     !case(2,5,4,10,11,12,15,16,20,22,23,24,25,9)
@@ -1583,7 +1589,8 @@ end function eos_allows_shock_and_work
 logical function eos_requires_polyk(ieos)
  integer, intent(in) :: ieos
 
- eos_requires_polyk = eos_requires_isothermal(ieos) .or. ieos==9
+ ! ieos=26 is isothermal but gets its sound speed from K and rhos, not polyk
+ eos_requires_polyk = (eos_requires_isothermal(ieos) .and. ieos /= 26) .or. ieos==9
 
 end function eos_requires_polyk
 
@@ -1751,7 +1758,8 @@ subroutine read_headeropts_eos(ieos,hdr,ierr)
        endif
     else
        if (iverbose >= 0) write(iprint,*) 'setting isothermal sound speed^2 (polyk) = ',polyk,' gamma = ',gamma
-       if (polyk <= tiny(polyk)) write(iprint,*) 'WARNING! sound speed zero in dump!, polyk = ',polyk
+       if (polyk <= tiny(polyk) .and. eos_requires_polyk(ieos)) &
+          write(iprint,*) 'WARNING! sound speed zero in dump!, polyk = ',polyk
     endif
  endif
  call extract('polyk2',polyk2,hdr,ierr)

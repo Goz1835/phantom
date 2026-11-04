@@ -119,6 +119,7 @@ ifeq ($(SETUP), solarsystem)
     GRAVITY=yes
     DUST=yes
     GRANULAR=yes
+    ISOTHERMAL=yes
     MODFILE=moddump_sink2gas.f90
 endif
 

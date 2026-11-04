@@ -204,12 +204,9 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
  ! set initial chemical abundance values
  call initialise_krome()
 
- ! calculate initial derivatives (density, SPH forces, etc.)
- call get_derivs_initial(time,dumpfile,ntot,dtnew_first,ierr)
- if (ierr /= 0) call fatal('initial','error in derivatives setup')
-
  ! set initial value of the evolved density to be the density in granular,
- ! but only where it was not already set by the setup or read from the dump (restarts)
+ ! but only where it was not already set by the setup or read from the dump (restarts).
+ ! This must be done before the initial derivatives, which use it in the EoS
  if (do_evolveddensity) then
     do i=1,npart
        !might not need the isdead check
@@ -221,6 +218,10 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
        drhomatdt(i) = 0.
     enddo
  endif
+
+ ! calculate initial derivatives (density, SPH forces, etc.)
+ call get_derivs_initial(time,dumpfile,ntot,dtnew_first,ierr)
+ if (ierr /= 0) call fatal('initial','error in derivatives setup')
 
  ! set initial timestep
  if (.not.ind_timesteps) then

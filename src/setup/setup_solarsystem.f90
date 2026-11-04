@@ -172,6 +172,8 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  call get_options(trim(fileprefix)//'.setup',id==master,ierr,&
                   read_setupfile,write_setupfile)
  if (ierr /= 0) stop 'rerun phantomsetup after editing .setup file'
+ if (use_granular .and. maxvxyzu >= 4) &
+    call fatal('setup_solarsystem','use_granular=T requires compiling with ISOTHERMAL=yes')
 !
 ! set units
 !
