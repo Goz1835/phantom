@@ -51,7 +51,7 @@ end subroutine init_eos_incomp
 !+
 !-----------------------------------------------------------------------
 subroutine equationofstate_incomp(rho,pressure,spsound,gamma)
- use granular_variables,    only: rhos,K
+ use granular,    only: rhos,K
  real, intent(in)    :: rho
  real, intent(out)   :: pressure, spsound, gamma
 
@@ -72,7 +72,7 @@ end subroutine equationofstate_incomp
 !+
 !----------------------------------------------------------------
 subroutine eos_info_incomp(iprint)
- use granular_variables,    only: rhos,K
+ use granular,    only: rhos,K
  use units,                 only: unit_density,unit_pressure
  integer, intent(in) :: iprint
 

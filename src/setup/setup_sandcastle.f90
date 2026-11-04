@@ -46,13 +46,12 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use mpiutils,     only:reduceall_mpi
  use mpidomain,    only:i_belong
  use viscosity,    only:irealvisc
- use granular_variables, only:rhos
+ use granular,     only:rhos,set_granular_K,set_granular_density
  use eos,          only:ieos
  use infile_utils, only:get_options,infile_exists
  use units,        only:set_units,udist,unit_density,utime
  use externalforces,only:iext_gravity,grav_accel
  use options,      only:iexternalforce
- use granular_variables,     only:rhos
  integer,           intent(in)    :: id
  integer,           intent(out)   :: npart
  integer,           intent(out)   :: npartoftype(:)
@@ -64,6 +63,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  real,              intent(out)   :: vxyzu(:,:)
  real                             :: deltab,deltas,totmass
  integer                          :: i,ierr
+ character(len=12)                :: elasticbulkmodulus,granulardensity
 
  call set_units(dist=metre,time=seconds,mass=kg)
  !
@@ -72,13 +72,21 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  time        = 0.
  hfact       = hfact_default
  rhozero     = 3.5*g_per_cc/unit_density
- rhos        = rhozero ! Set rhos in the equation of state to be the rho zero that is determined here (in code units)
+ ! Set the density in the granular module
+ granulardensity = "3.5*g/cm^3"
+ call set_granular_density(granulardensity)
  gamma       = 1
  polyk       = 0.
+ 
  iexternalforce = iext_gravity
  grav_accel  = 9.81*metre/udist/(seconds/utime)
  irealvisc = 4
  ieos = 26
+
+ ! Set the elastic bulk modulus for the granular flow
+ elasticbulkmodulus = "101.*kpa"
+ call set_granular_K(elasticbulkmodulus)
+
  !
  ! Default setup parameters
  !

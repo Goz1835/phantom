@@ -87,6 +87,7 @@ endif
 ifeq ($(SETUP), sandcastle)
 #   Sand on barrier
     ISOTHERMAL=yes
+    GRANULAR=yes
     SETUPFILE=setup_sandcastle.f90
     KNOWN_SETUP=yes
 endif
@@ -117,6 +118,7 @@ ifeq ($(SETUP), solarsystem)
     KNOWN_SETUP=yes
     GRAVITY=yes
     DUST=yes
+    GRANULAR=yes
     MODFILE=moddump_sink2gas.f90
 endif
 

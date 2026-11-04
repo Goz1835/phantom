@@ -77,7 +77,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use kernel,        only:hfact_default
  use eos_tillotson, only:rho_0,A
  use eos,           only:ieos
- use granular_variables,    only:set_reference_density_cgs, rhos, K, set_granular_K_kpa
+ use granular,    only:set_granular_density, rhos, K, set_granular_K
  use shape,         only:set_shape
  !use options,       only:ieos
  use setup_params,  only:npart_total
@@ -206,8 +206,8 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
     ieos = 26
 
     ! set the values for the eos
-    call set_reference_density_cgs(apophis_rho)
-    call set_granular_K_kpa(apophis_K)
+    call set_granular_density(apophis_rho)
+    call set_granular_K(apophis_K)
  endif
 
  !

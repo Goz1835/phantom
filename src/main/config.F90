@@ -162,7 +162,11 @@ module dim
 #endif
 
  ! incompressible equation of state variables
+#ifdef GRANULAR
  logical, parameter :: do_evolveddensity = .true.
+#else
+ logical, parameter :: do_evolveddensity = .false.
+#endif
  integer :: max_evolved_density = 0
 
  ! default is to only store divv

@@ -39,14 +39,15 @@ contains
 !------------------------------------------------------------------
 subroutine check_setup(nerror,nwarn,restart)
  use dim,  only:maxp,maxvxyzu,periodic,use_dust,ndim,mhd,use_dustgrowth, &
-                do_radiation,n_nden_phantom,mhd_nonideal,do_nucleation,use_krome,ind_timesteps
+                do_radiation,n_nden_phantom,mhd_nonideal,do_nucleation,use_krome,ind_timesteps, &
+                do_evolveddensity
  use part, only:xyzh,massoftype,hfact,vxyzu,npart,npartoftype,nptmass,gravity, &
                 iphase,maxphase,isetphase,labeltype,igas,maxtypes,&
                 idust,xyzmh_ptmass,vxyz_ptmass,iboundary,isdeadh,ll,ideadhead,&
                 kill_particle,shuffle_part,iamtype,iamdust,Bxyz,rad,radprop, &
                 remove_particle_from_npartoftype,ien_type,ien_etotal,gr,eos_vars,itemp
  use eos,             only:gamma,polyk,eos_requires_polyk,ieos_helmholtz
- use granular_variables, only:rhos, K
+ use granular, only:rhos, K
  use centreofmass,    only:get_centreofmass
  use options,         only:ieos,iexternalforce,use_dustfrac,use_hybrid
  use io,              only:id,master
@@ -123,12 +124,16 @@ subroutine check_setup(nerror,nwarn,restart)
     endif
  endif
  if (ieos==26) then
+    if (.not.do_evolveddensity) then
+       if (id==master) print*,'ERROR: incomp EOS (ieos==26) requires evolved density: compile with GRANULAR=yes'
+       nerror = nerror + 1
+    endif
     if (rhos < 0.) then
-       if (id==master) print*,'ERROR: when using incomp EOS (ieos==26), rhos must be set in setup set_reference_density_cgs'
+       if (id==master) print*,'ERROR: when using incomp EOS (ieos==26), rhos must be set in setup set_granular_density'
        nerror = nerror + 1
     endif
     if (K < 0.) then
-       if (id==master) print*,'ERROR: when using incomp EOS (ieos==26), K must be set in setup using set_granular_K_kpa'
+       if (id==master) print*,'ERROR: when using incomp EOS (ieos==26), K must be set in setup using set_granular_K'
        nerror = nerror + 1
     endif
  endif

@@ -70,7 +70,7 @@ subroutine set_default_options
  use timestep,        only:set_defaults_timestep
  use part,            only:hfact,Bextx,Bexty,Bextz,tolh
  use viscosity,       only:set_defaults_viscosity
- use granular_variables,        only:set_defaults_granular
+ use granular,        only:set_defaults_granular
  use dim,             only:gr,do_radiation,isothermal
  use kernel,          only:hfact_default
  use eos,             only:set_defaults_eos

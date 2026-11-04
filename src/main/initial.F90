@@ -123,7 +123,7 @@ subroutine startrun(infile,logfile,evfile,dumpfile,noread)
  use timestep_ind,     only:ibinnow,init_ibin,istepfrac,nbinmax
  use writeheader,      only:write_header
  use metric,           only:update_metric
- use granular_variables,         only:rhos
+ use granular,         only:rhos
  character(len=*), intent(inout) :: infile
  character(len=*), intent(out)   :: logfile,evfile,dumpfile
  logical,          intent(in), optional :: noread
@@ -278,7 +278,7 @@ subroutine read_infile_and_initial_conditions(infile,logfile,evfile,dumpfile,tim
  use io,               only:fatal,warning
  use dim,              only:idumpfile,gr
  use metric,           only:update_metric
- use granular_variables, only:init_granular
+ use granular, only:init_granular
  character(len=*), intent(inout) :: infile,logfile,evfile,dumpfile
  real,             intent(out)   :: time
  integer,          intent(out)   :: ierr

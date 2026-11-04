@@ -36,7 +36,7 @@ contains
 !+
 !----------------------------------------------------------------
 subroutine set_defaults_viscosity
- use granular_variables,     only:set_defaults_granular
+ use granular,     only:set_defaults_granular
 
  irealvisc = 0   ! Physical viscosity
  shearparam = 0.1  ! alphadisc (if irealvisc=2) or nu if irealvisc=1
@@ -186,7 +186,7 @@ end subroutine viscinfo
 !----------------------------------------------------------------
 subroutine write_options_viscosity(iwritein)
  use infile_utils, only:write_inopt
- use granular_variables,     only:write_options_granular
+ use granular,     only:write_options_granular
  integer, intent(in) :: iwritein
 
  write(iwritein,"(/,a)") '# options controlling physical viscosity'
@@ -206,7 +206,7 @@ end subroutine write_options_viscosity
 subroutine read_options_viscosity(db,nerr)
  use io,           only:error
  use infile_utils, only:inopts,read_inopt
- use granular_variables,     only:read_options_granular
+ use granular,     only:read_options_granular
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
  character(len=*), parameter :: label = 'read_infile'
