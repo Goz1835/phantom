@@ -104,7 +104,10 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use eos_tillotson, only:rho_0,A
  use eos,           only:ieos
  use granular,    only:set_granular_density, rhos, K, set_granular_K
+<<<<<<< HEAD
  use shape,         only:set_shape
+=======
+>>>>>>> b72642be3 (Combine granular.f90 and granular_variables.f90)
  use shape,         only:set_shape
  !use options,       only:ieos
  use setup_params,  only:npart_total
