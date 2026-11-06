@@ -35,49 +35,24 @@ module setup
 
  logical :: add_mars_moons ! new runtime parameter, default .true or .false
 
- logical :: add_mars_moons ! new runtime parameter, default .true or .false
-
  integer :: np_apophis
  logical :: asteroids
  character(len=20) :: epoch,tmax_in,dtmax_in
  logical :: use_dem,apophis_only
- character(len=256) :: apophis_shape_file
- 
- logical :: use_granular
- character(len=12) :: apophis_K, apophis_rho
-
- real :: scale_vel
- real :: scale_pos
- real :: scale_earth_sep
- real :: scale_r_apophis
- real :: scale_rho
- real :: apophis_spin_period
- real :: apophis_spin_axis(3)
- real :: apophis_spin_torque_align_deg ! torque-align angle (deg); -1 = use apophis_spin_axis_*
- logical :: use_dem,apophis_only
- character(len=256) :: apophis_shape_file
- 
- logical :: use_granular
- character(len=12) :: apophis_K, apophis_rho
-
- real :: scale_vel
- real :: scale_pos
- real :: scale_earth_sep
- real :: scale_r_apophis
- real :: scale_rho
- real :: apophis_spin_period
- real :: apophis_spin_axis(3)
- real :: apophis_spin_torque_align_deg ! torque-align angle (deg); -1 = use apophis_spin_axis_*
- logical :: use_dem,apophis_only
 character(len=256) :: apophis_shape_file
 
+ logical :: use_granular
+ character(len=12) :: apophis_K, apophis_rho
+
  real :: scale_vel
  real :: scale_pos
  real :: scale_earth_sep
  real :: scale_r_apophis
  real :: scale_rho
+ real :: mass_apophis
  real :: apophis_spin_period
  real :: apophis_spin_axis(3)
+ real :: apophis_spin_torque_align_deg ! torque-align angle (deg); -1 = use apophis_spin_axis_*
 
  private
 
@@ -85,16 +60,16 @@ contains
 !----------------------------------------------------------------
 !+
 !  setup for solar system orbits
-!+                          
+!+
 !----------------------------------------------------------------
 subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,time,fileprefix)
  use part,          only:nptmass,xyzmh_ptmass,vxyz_ptmass,idust,set_particle_type,&
                          grainsize,graindens,ndustlarge,ndusttypes,ndustsmall,ihacc,igas,&
                          rhomat,drhomatdt,&
                          isdead_or_accreted
- use dim,           only:do_evolveddensity
+ use dim,           only:do_evolveddensity,maxvxyzu
  use setbinary,     only:set_binary
- use units,         only:set_units,umass,udist,unit_density,unit_velocity,utime,in_code_units,in_units,in_units
+ use units,         only:set_units,umass,udist,unit_density,unit_velocity,utime,in_code_units,in_units
  use physcon,       only:solarm,pi,au,km,solarr,ceresm,earthm,earthr,days
  use io,            only:master,fatal,warning
  use timestep,      only:tmax,dtmax
@@ -104,10 +79,6 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use eos_tillotson, only:rho_0,A
  use eos,           only:ieos
  use granular,    only:set_granular_density, rhos, K, set_granular_K
-<<<<<<< HEAD
- use shape,         only:set_shape
-=======
->>>>>>> b72642be3 (Combine granular.f90 and granular_variables.f90)
  use shape,         only:set_shape
  !use options,       only:ieos
  use setup_params,  only:npart_total
@@ -115,7 +86,6 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use infile_utils,  only:get_options
  use ptmass,        only:isink_potential
  use viscosity,     only:irealvisc
- use ptmass,        only:isink_potential
  integer,           intent(in)    :: id
  integer,           intent(inout) :: npart
  integer,           intent(out)   :: npartoftype(:)
@@ -125,13 +95,13 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  real,              intent(inout) :: time
  character(len=20), intent(in)    :: fileprefix
  real,              intent(out)   :: vxyzu(:,:)
- integer :: ierr,i,nerr,n_apophis_part,i_apophis_first,i_apophis_last
+ integer :: ierr,i,nerr,n_apophis_part,i_apophis_first,i_apophis_last,ierr_spin
  integer, parameter :: iearth = 4  ! Earth sink index when apophis_only=F
  !integer :: values(8),year,month,day
  real    :: period,semia,mtot,dx
- real    :: r_apophis,m_apophis,rtidal,spsoundmin
+ real    :: r_apophis,m_apophis,vol_apophis,rtidal,spsoundmin
  real    :: dr(3),sep_km,sep_re,rperi,rperi_km,rperi_re,ecc,vrel_kms
- real    :: dv(3)
+ real    :: dv(3),spin_axis_resolved(3),torque_align_deg
 !
 ! default runtime parameters
 !
@@ -150,7 +120,6 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  use_dem = .false.
  apophis_only = .true.
  add_mars_moons = .false.
- add_mars_moons = .false.
  !call date_and_time(values=values)
  !year = values(1); month = values(2); day = values(3)
  !write(epoch,"(i4.4,'-',i2.2,'-',i2.2)") year,month,day
@@ -160,9 +129,11 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  scale_earth_sep=1.
  scale_r_apophis=1.
  scale_rho=1.
+ mass_apophis=0.
  apophis_shape_file='apophis.shape'
  apophis_spin_period = 0.
  apophis_spin_axis   = (/ 0., 0., 1. /)
+ apophis_spin_torque_align_deg = -1.
 !
 ! read runtime parameters from setup file
 !
@@ -272,114 +243,90 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
     call add_body('apophis',nptmass,xyzmh_ptmass,vxyz_ptmass,mtot,nerr,epoch)
     if (nerr > 0) call warning('apophis','missing some information')
 
-    r_apophis = xyzmh_ptmass(5,nptmass) * scale_r_apophis * scale_r_apophis
+    r_apophis = xyzmh_ptmass(5,nptmass) * scale_r_apophis
     xyzmh_ptmass(5,nptmass) = r_apophis
     print "(a,1pg10.3)",' apophis radius scaled by ',scale_r_apophis
 
-    xyzmh_ptmass(5,nptmass) = r_apophis
-    print "(a,1pg10.3)",' apophis radius scaled by ',scale_r_apophis
-    
+    vxyz_ptmass(1:3,nptmass) = vxyz_ptmass(1:3,nptmass)*scale_vel
+    print "(a,1pg10.3)",' velocity of apophis scaled by ',scale_vel
+
+    xyzmh_ptmass(1:3,nptmass) = xyzmh_ptmass(1:3,nptmass)*scale_pos
+    print "(a,1pg10.3)",' initial position of apophis scaled by ',scale_pos
+
+    if (.not.apophis_only .and. nptmass >= iearth) then
+       if (abs(scale_earth_sep - 1.0) > 1.0e-6) then
+          dr = xyzmh_ptmass(1:3,nptmass) - xyzmh_ptmass(1:3,iearth)
+          xyzmh_ptmass(1:3,nptmass) = xyzmh_ptmass(1:3,iearth) + scale_earth_sep*dr
+          print "(a,1pg10.3)",' Earth-Apophis separation scaled by ',scale_earth_sep
+       endif
+       dr = xyzmh_ptmass(1:3,nptmass) - xyzmh_ptmass(1:3,iearth)
+       dv = vxyz_ptmass(1:3,nptmass) - vxyz_ptmass(1:3,iearth)
+       rperi = get_pericentre_distance(xyzmh_ptmass(4,iearth),dr,dv)
+       ecc = get_eccentricity(xyzmh_ptmass(4,iearth),dr,dv)
+       rperi_km = rperi*udist/km
+       rperi_re = rperi_km/(earthr/km)
+       sep_km = sqrt(dot_product(dr,dr))*udist/km
+       sep_re = sep_km/(earthr/km)
+       vrel_kms = in_units(sqrt(dot_product(dv,dv)),'km/s')
+       print "(a,1pg10.3,a,1pg10.3,a)",' pericentre distance = ',rperi_km,' km (',rperi_re,' R_Earth)'
+       print "(a,1pg10.3)",' geocentric eccentricity = ',ecc
+       print "(a,1pg10.3,a,1pg10.3,a)",' geocentric separation (initial) = ',sep_km,' km (',sep_re,' R_Earth)'
+       print "(a,1pg10.3,a)",' Apophis-Earth relative velocity = ',vrel_kms,' km/s'
+    elseif (abs(scale_earth_sep - 1.0) > 1.0e-6) then
+       call warning('setup_solarsystem','scale_earth_sep ignored when apophis_only=T (Earth absent)')
+    endif
+
+    !
+    ! volume of apophis: a sphere of r_apophis for a sink, or the body actually built by set_shape
+    !
+    vol_apophis = 4./3.*pi*r_apophis**3
+    if (np_apophis > 1) then
+       call set_shape('closepacked',id,master,np_apophis,xyzmh_ptmass(1:3,nptmass),r_apophis,&
+                      hfact,npart,xyzh,npart_total,objfile=apophis_shape_file,vol=vol_apophis)
+    endif
+    !
+    ! fix either the mass (mass_apophis > 0) or the density (scale_rho); the other follows from the volume
     ! determine mass of apophis based on the relevant density for the eos.
     ! assume it follows tillotson if not otherwise defined
-    if(ieos == 26 .or. use_granular) then
-      m_apophis = 4./3.*pi*(rhos*scale_rho)*r_apophis**3
+    !
+    if (mass_apophis > 0.) then
+       m_apophis = mass_apophis/umass
+    elseif (ieos == 26 .or. use_granular) then
+       m_apophis = (rhos*scale_rho)*vol_apophis
     else
-      m_apophis = 4./3.*pi*(rho_0*scale_rho*scale_rho/unit_density)*r_apophis**3
+       m_apophis = (rho_0*scale_rho/unit_density)*vol_apophis
     endif
-
     xyzmh_ptmass(4,nptmass) = m_apophis
-    print "(a,2(es10.3,a))",' mass of apophis is ',m_apophis*umass,&
+    print "(a,2(es10.3,a))",' mass of apophis is calculated as',m_apophis*umass,&
                             ' g or ',m_apophis*umass/ceresm,' ceres masses'
-    print "(a,1pg10.3,a)",' volume of apophis is calculated as ',4./3.*pi*r_apophis**3*udist**3,' km^3'
-    print "(a,1pg10.3,a)",' density is ',m_apophis/(4./3.*pi*r_apophis**3)*unit_density,' g/cm^3'
-    rtidal = (2.)**(1./3.)*r_apophis*(earthm/umass/m_apophis)**(1./3.)
+    print "(a,1pg10.3,a)",' volume of apophis is calculated as ', vol_apophis,' km^3'
+    print "(a,1pg10.3,a)",' density is ',m_apophis/vol_apophis*unit_density,' g/cm^3'
+    if (ieos == 26 .or. use_granular) then
+       if (np_apophis > 1 .and. .not.use_dem .and. &
+           abs(m_apophis/vol_apophis - rhos*scale_rho) > 0.02*rhos*scale_rho) &
+          call warning('apophis','SPH body density differs from rhos*scale_rho used by the EOS')
+    elseif (np_apophis > 1 .and. .not.use_dem .and. &
+        abs(m_apophis/vol_apophis*unit_density - rho_0*scale_rho) > 0.02*rho_0*scale_rho) then
+       call warning('apophis','SPH body density differs from rho_0*scale_rho used by the EOS')
+    endif
+    rtidal = (2.)**(1./3.)*(3.*vol_apophis/(4.*pi))**(1./3.)*(earthm/umass/m_apophis)**(1./3.)
     print "(3(a,1pg10.3),a)",' fluid Roche limit r_tidal is ',rtidal,' au, ',&
          rtidal*udist/km,' km, or ',rtidal*udist/earthr,' earth radii'
-
-    vxyz_ptmass(1:3,nptmass) = vxyz_ptmass(1:3,nptmass)*scale_vel
-    print "(a,1pg10.3)",' velocity of apophis scaled by ',scale_vel
-
-    xyzmh_ptmass(1:3,nptmass) = xyzmh_ptmass(1:3,nptmass)*scale_pos
-    print "(a,1pg10.3)",' initial position of apophis scaled by ',scale_pos
-
-    if (.not.apophis_only .and. nptmass >= iearth) then
-       if (abs(scale_earth_sep - 1.0) > 1.0e-6) then
-          dr = xyzmh_ptmass(1:3,nptmass) - xyzmh_ptmass(1:3,iearth)
-          xyzmh_ptmass(1:3,nptmass) = xyzmh_ptmass(1:3,iearth) + scale_earth_sep*dr
-          print "(a,1pg10.3)",' Earth-Apophis separation scaled by ',scale_earth_sep
-       endif
-       dr = xyzmh_ptmass(1:3,nptmass) - xyzmh_ptmass(1:3,iearth)
-       dv = vxyz_ptmass(1:3,nptmass) - vxyz_ptmass(1:3,iearth)
-       rperi = get_pericentre_distance(xyzmh_ptmass(4,iearth),dr,dv)
-       ecc = get_eccentricity(xyzmh_ptmass(4,iearth),dr,dv)
-       rperi_km = rperi*udist/km
-       rperi_re = rperi_km/(earthr/km)
-       sep_km = sqrt(dot_product(dr,dr))*udist/km
-       sep_re = sep_km/(earthr/km)
-       vrel_kms = in_units(sqrt(dot_product(dv,dv)),'km/s')
-       print "(a,1pg10.3,a,1pg10.3,a)",' pericentre distance = ',rperi_km,' km (',rperi_re,' R_Earth)'
-       print "(a,1pg10.3)",' geocentric eccentricity = ',ecc
-       print "(a,1pg10.3,a,1pg10.3,a)",' geocentric separation (initial) = ',sep_km,' km (',sep_re,' R_Earth)'
-       print "(a,1pg10.3,a)",' Apophis-Earth relative velocity = ',vrel_kms,' km/s'
-    elseif (abs(scale_earth_sep - 1.0) > 1.0e-6) then
-       call warning('setup_solarsystem','scale_earth_sep ignored when apophis_only=T (Earth absent)')
-    endif
-
-    rtidal = (2.)**(1./3.)*r_apophis*(earthm/umass/m_apophis)**(1./3.)
-    print "(3(a,1pg10.3),a)",' fluid Roche limit r_tidal is ',rtidal,' au, ',&
-         rtidal*udist/km,' km, or ',rtidal*udist/earthr,' earth radii'
-
-    vxyz_ptmass(1:3,nptmass) = vxyz_ptmass(1:3,nptmass)*scale_vel
-    print "(a,1pg10.3)",' velocity of apophis scaled by ',scale_vel
-
-    xyzmh_ptmass(1:3,nptmass) = xyzmh_ptmass(1:3,nptmass)*scale_pos
-    print "(a,1pg10.3)",' initial position of apophis scaled by ',scale_pos
-
-    if (.not.apophis_only .and. nptmass >= iearth) then
-       if (abs(scale_earth_sep - 1.0) > 1.0e-6) then
-          dr = xyzmh_ptmass(1:3,nptmass) - xyzmh_ptmass(1:3,iearth)
-          xyzmh_ptmass(1:3,nptmass) = xyzmh_ptmass(1:3,iearth) + scale_earth_sep*dr
-          print "(a,1pg10.3)",' Earth-Apophis separation scaled by ',scale_earth_sep
-       endif
-       dr = xyzmh_ptmass(1:3,nptmass) - xyzmh_ptmass(1:3,iearth)
-       dv = vxyz_ptmass(1:3,nptmass) - vxyz_ptmass(1:3,iearth)
-       rperi = get_pericentre_distance(xyzmh_ptmass(4,iearth),dr,dv)
-       ecc = get_eccentricity(xyzmh_ptmass(4,iearth),dr,dv)
-       rperi_km = rperi*udist/km
-       rperi_re = rperi_km/(earthr/km)
-       sep_km = sqrt(dot_product(dr,dr))*udist/km
-       sep_re = sep_km/(earthr/km)
-       vrel_kms = in_units(sqrt(dot_product(dv,dv)),'km/s')
-       print "(a,1pg10.3,a,1pg10.3,a)",' pericentre distance = ',rperi_km,' km (',rperi_re,' R_Earth)'
-       print "(a,1pg10.3)",' geocentric eccentricity = ',ecc
-       print "(a,1pg10.3,a,1pg10.3,a)",' geocentric separation (initial) = ',sep_km,' km (',sep_re,' R_Earth)'
-       print "(a,1pg10.3,a)",' Apophis-Earth relative velocity = ',vrel_kms,' km/s'
-    elseif (abs(scale_earth_sep - 1.0) > 1.0e-6) then
-       call warning('setup_solarsystem','scale_earth_sep ignored when apophis_only=T (Earth absent)')
-    endif
-
 
     if (np_apophis > 1) then
        !
        ! replace the sink particle with a ball of stuff
        !
-       call set_shape('closepacked',id,master,np_apophis,xyzmh_ptmass(1:3,nptmass),r_apophis,&
-                      hfact,npart,xyzh,npart_total,objfile=apophis_shape_file)
        !call set_sphere('closepacked',id,master,0.,r_apophis,dx,hfact,npart,xyzh,npart_total,&
        !                xyz_origin=xyzmh_ptmass(1:3,nptmass),exactN=.true.,np_requested=np_apophis)
 
        n_apophis_part = npart !we are saving count here because will rewrite other variable later
-       n_apophis_part = npart !we are saving count here because will rewrite other variable later
        do i=1,npart
           vxyzu(1:3,i) = vxyz_ptmass(1:3,nptmass)
        enddo
-       ! set mass of apophis based on the rho we target, and the volume calculated
-       m_apophis = rhos * apophis_v
        massoftype(igas) = m_apophis / npart
        npartoftype(igas) = npart
        nptmass = nptmass - 1
-       i_apophis_first = 0 !initialize apophis sink index range to 0 before know if DEM used
-       i_apophis_last  = 0 !initialize apophis sink index range to 0 before know if DEM used
        i_apophis_first = 0 !initialize apophis sink index range to 0 before know if DEM used
        i_apophis_last  = 0 !initialize apophis sink index range to 0 before know if DEM used
 
@@ -416,14 +363,6 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
              call warning('setup_solarsystem',&
                           'could not resolve Apophis spin axis; spin not applied')
           endif
-          i_apophis_first = nptmass - n_apophis_part + 1
-          i_apophis_last  = nptmass
-       endif
-
-       if (apophis_spin_period > 0.) then
-          call set_apophis_spin(id,apophis_spin_period,apophis_spin_axis,m_apophis,r_apophis,&
-                                use_dem,n_apophis_part,i_apophis_first,i_apophis_last,&
-                                xyzh,vxyzu,xyzmh_ptmass,vxyz_ptmass)
        endif
        !
        ! print quantities from the equation of state to give an idea of the timestep
@@ -433,7 +372,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
           print "(a,1pg11.4,a)",'     sound speed min = ',spsoundmin*unit_velocity/km,' km/s'
           print "(a,1pg10.3,a)",' sound crossing time = ',(r_apophis/spsoundmin)*utime,' seconds'
        elseif (ieos==26) then
-          spsoundmin = sqrt(K/rhos) 
+          spsoundmin = sqrt(K/rhos)
           print "(a,1pg11.4,a)",'     sound speed min = ',spsoundmin*unit_velocity/km,' km/s'
           print "(a,1pg10.3,a)",' sound crossing time = ',(r_apophis/spsoundmin)*utime,' seconds'
        endif
@@ -448,9 +387,6 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
           call warning('setup_solarsystem',&
                        'could not resolve Apophis spin axis; spin not applied')
        endif
-    elseif (apophis_spin_period > 0.) then
-       call set_apophis_spin(id,apophis_spin_period,apophis_spin_axis,m_apophis,r_apophis,&
-                             .false.,0,nptmass,nptmass,xyzh,vxyzu,xyzmh_ptmass,vxyz_ptmass)
     endif
  endif
  !
@@ -461,94 +397,6 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  if (ierr /= 0) call fatal('setup','ERRORS during setup')
 
 end subroutine setpart
-
-!----------------------------------------------------------------
-!+
-!  impose solid-body spin on Apophis (SPH or DEM particles)
-!+
-!----------------------------------------------------------------
-subroutine set_apophis_spin(id,period_s,spin_axis_in,m_body,r_body,use_dem,n_gas,&
-                            i_sink_first,i_sink_last,xyzh,vxyzu,xyzmh_ptmass,vxyz_ptmass)
- use part,        only:ispinx,ispiny,ispinz,iReff
- use units,       only:utime
- use physcon,     only:twopi,hours
- use io,          only:master,fatal
- use vectorutils, only:cross_product3D,unitvec,mag
- integer, intent(in) :: id,i_sink_first,i_sink_last,n_gas
- real,    intent(in) :: period_s,spin_axis_in(3),m_body,r_body
- logical, intent(in) :: use_dem
- real,    intent(inout) :: xyzh(:,:),vxyzu(:,:),xyzmh_ptmass(:,:),vxyz_ptmass(:,:)
- real :: omega,omega_crit,period_crit_s,spin_axis(3),spin_vec(3),r_cm(3),r_rel(3),dv(3)
- real :: pmass,reff
- integer :: i,n
-
- if (period_s <= 0.) return
-
- if (mag(spin_axis_in) <= 0.) call fatal('set_apophis_spin','zero spin axis vector')
- spin_axis = unitvec(spin_axis_in)
-
- omega = twopi/(period_s/utime)
- spin_vec = omega*spin_axis
-
- r_cm = 0.
- pmass = 0.
- if (use_dem) then
-    n = i_sink_last - i_sink_first + 1
-    do i=i_sink_first,i_sink_last
-       pmass = pmass + xyzmh_ptmass(4,i)
-       r_cm  = r_cm + xyzmh_ptmass(4,i)*xyzmh_ptmass(1:3,i)
-    enddo
- else
-    n = n_gas
-    do i=1,n_gas
-       r_cm = r_cm + xyzh(1:3,i)
-    enddo
- endif
- if (n > 0) then
-    if (use_dem) then
-       r_cm = r_cm/pmass
-    else
-       r_cm = r_cm/real(n)
-    endif
- endif
-
- if (use_dem) then
-    do i=i_sink_first,i_sink_last
-       r_rel = xyzmh_ptmass(1:3,i) - r_cm
-       call cross_product3D(spin_vec,r_rel,dv)
-       vxyz_ptmass(1:3,i) = vxyz_ptmass(1:3,i) + dv
-       reff = xyzmh_ptmass(iReff,i)
-       xyzmh_ptmass(ispinx,i) = omega*reff**2*spin_axis(1)
-       xyzmh_ptmass(ispiny,i) = omega*reff**2*spin_axis(2)
-       xyzmh_ptmass(ispinz,i) = omega*reff**2*spin_axis(3)
-    enddo
- else
-    do i=1,n_gas
-       r_rel = xyzh(1:3,i) - r_cm
-       call cross_product3D(spin_vec,r_rel,dv)
-       vxyzu(1:3,i) = vxyzu(1:3,i) + dv
-    enddo
-    if (i_sink_first > 0) then
-       reff = r_body
-       xyzmh_ptmass(ispinx,i_sink_first) = omega*reff**2*spin_axis(1)
-       xyzmh_ptmass(ispiny,i_sink_first) = omega*reff**2*spin_axis(2)
-       xyzmh_ptmass(ispinz,i_sink_first) = omega*reff**2*spin_axis(3)
-    endif
- endif
-
- if (r_body > 0.) then
-    omega_crit = sqrt(m_body/r_body**3)
-    period_crit_s = twopi/omega_crit*utime
-    if (id == master) then
-       print "(a,1pg10.3,a)",' Apophis spin period = ',period_s,' s (',period_s/hours,' hrs)'
-       print "(a,3(1x,1pg10.3))",' Apophis spin axis  = ',spin_axis
-       print "(a,1pg10.3,a)",' Apophis spin rate   = ',omega*utime,' rad/s'
-       print "(a,1pg10.3)",' omega/omega_crit (fluid spin limit) = ',omega/omega_crit
-       print "(a,1pg10.3,a)",' fluid spin-limit period = ',period_crit_s,' s (',period_crit_s/hours,' hrs)'
-    endif
- endif
-
-end subroutine set_apophis_spin
 
 !----------------------------------------------------------------
 !+
@@ -703,57 +551,6 @@ subroutine replace_gas_with_dem(id,npart,ngas,pmass,xyzh,vxyzu,nptmass,xyzmh_ptm
     print "(a,1pg12.4,a)",' DEM NN spacing (min/median/max) = ',sep_min*udist/km,&
           ' / ',sep_med*udist/km,' / ',sep_max*udist/km,' km'
  endif
- real, intent(in)    :: hfact
- integer :: i,j
- real :: dxij,dyij,dzij,dmin,reff,sep(npart)
- real :: sep_med,sep_min,sep_max
-
- if (npart < 1) return
-
- !
- ! DEM sphere radius from cropped lattice geometry (not r_apophis/40).
- ! Use per-particle Reff = 0.5*nearest-neighbour distance so ellipsoid/mesh
- ! surfaces do not share one radius (median) that overlaps close pairs on step 1.
- !
- sep_med = 0.
- sep_min = huge(sep_min)
- sep_max = 0.
- if (npart == 1) then
-    sep(1) = xyzh(4,1)/hfact
- else
-    do i=1,npart
-       dmin = huge(dmin)
-       do j=1,npart
-          if (j == i) cycle
-          dxij = xyzh(1,i) - xyzh(1,j)
-          dyij = xyzh(2,i) - xyzh(2,j)
-          dzij = xyzh(3,i) - xyzh(3,j)
-          dmin = min(dmin,sqrt(dxij*dxij + dyij*dyij + dzij*dzij))
-       enddo
-       sep(i) = dmin
-       sep_min = min(sep_min,dmin)
-       sep_max = max(sep_max,dmin)
-    enddo
-    do i=2,npart
-       dmin = sep(i)
-       j = i - 1
-       do while (j >= 1 .and. sep(j) > dmin)
-          sep(j+1) = sep(j)
-          j = j - 1
-       enddo
-       sep(j+1) = dmin
-    enddo
-    if (mod(npart,2) == 1) then
-       sep_med = sep((npart+1)/2)
-    else
-       sep_med = 0.5*(sep(npart/2) + sep(npart/2+1))
-    endif
- endif
-
- if (id == master) then
-    print "(a,1pg12.4,a)",' DEM NN spacing (min/median/max) = ',sep_min*udist/km,&
-          ' / ',sep_med*udist/km,' / ',sep_max*udist/km,' km'
- endif
 
  xyzmh_ptmass(:,nptmass+1:) = 0.
  do i=1,npart
@@ -770,6 +567,148 @@ subroutine replace_gas_with_dem(id,npart,ngas,pmass,xyzh,vxyzu,nptmass,xyzmh_ptm
  pmass = 0.
 
 end subroutine replace_gas_with_dem
+
+!----------------------------------------------------------------
+!+
+!  resolve Apophis spin axis from torque-align or apophis_spin_axis_*
+!+
+!----------------------------------------------------------------
+subroutine resolve_apophis_spin_axis(i_start,i_end,xyzmh_ptmass,vxyz_ptmass,&
+                                       torque_align_deg,spin_axis_in,spin_axis_out,ierr,i_earth)
+ use vectorutils, only:mag,unitvec
+ use io,          only:warning
+ integer, intent(in)  :: i_start,i_end
+ real,    intent(in)  :: xyzmh_ptmass(:,:),vxyz_ptmass(:,:)
+ real,    intent(in)  :: torque_align_deg,spin_axis_in(3)
+ real,    intent(out) :: spin_axis_out(3)
+ integer, intent(out) :: ierr
+ integer, intent(in), optional :: i_earth
+ real :: nx,ny,nz
+
+ ierr = 0
+ if (torque_align_deg >= 0.) then
+    if (i_start < 1 .or. i_end < i_start) then
+       if (mag(spin_axis_in) > 0.) then
+          call warning('setup_solarsystem',&
+                       'torque-align spin needs a sink index range; using apophis_spin_axis instead')
+          spin_axis_out = unitvec(spin_axis_in)
+       else
+          ierr = 1
+       endif
+       return
+    endif
+    call compute_apophis_torque_align_spin_axis(i_start,i_end,xyzmh_ptmass,vxyz_ptmass,&
+                                                torque_align_deg,nx,ny,nz,ierr,i_earth=i_earth,&
+                                                spin_axis_fallback=spin_axis_in)
+    if (ierr /= 0) return
+    spin_axis_out = (/nx,ny,nz/)
+ else
+    if (mag(spin_axis_in) <= 0.) then
+       ierr = 1
+       return
+    endif
+    spin_axis_out = unitvec(spin_axis_in)
+ endif
+
+end subroutine resolve_apophis_spin_axis
+
+!----------------------------------------------------------------
+!+
+!  compute Apophis spin axis from Earth-Apophis orbit geometry
+!+
+!----------------------------------------------------------------
+subroutine compute_apophis_torque_align_spin_axis(i_start,i_end,xyzmh_ptmass,vxyz_ptmass,&
+                                                   torque_align_deg,nx,ny,nz,ierr,i_earth,&
+                                                   spin_axis_fallback)
+ use physcon, only:pi
+ use vectorutils, only:mag,unitvec
+ integer, intent(in)  :: i_start,i_end
+ real,    intent(in)  :: xyzmh_ptmass(:,:),vxyz_ptmass(:,:)
+ real,    intent(in)  :: torque_align_deg
+ real,    intent(out) :: nx,ny,nz
+ integer, intent(out) :: ierr
+ integer, intent(in), optional :: i_earth
+ real,    intent(in), optional :: spin_axis_fallback(3)
+ integer :: i,n,ie
+ real    :: rcm(3),v_spin(3)
+ real    :: rrel(3),vrel(3),hvec(3),rhat(3),hnorm,hn(3)
+ real    :: theta,ct,st,kdotv
+ logical :: ok
+ real    :: fallback(3)
+
+ ierr = 0
+ nx = 0.; ny = 0.; nz = 1.
+ n = i_end - i_start + 1
+ if (n < 1) then
+    ierr = 1
+    return
+ endif
+ ok = .false.
+
+ if (.not.present(i_earth)) then
+    print "(a)",' ERROR: apophis_spin_torque_align_deg requires Earth sink index'
+    ierr = 1
+    return
+ endif
+ ie = i_earth
+ if (ie < 1 .or. ie > size(xyzmh_ptmass,2)) then
+    ierr = 1
+    return
+ endif
+
+ rcm = 0.
+ v_spin = 0.
+ do i = i_start, i_end
+    rcm(1:3) = rcm(1:3) + xyzmh_ptmass(1:3,i)
+    v_spin(1:3) = v_spin(1:3) + vxyz_ptmass(1:3,i)
+ enddo
+ rcm = rcm / real(n)
+ v_spin = v_spin / real(n)
+ rrel = rcm - xyzmh_ptmass(1:3,ie)
+ vrel = v_spin - vxyz_ptmass(1:3,ie)
+ hvec = (/ rrel(2)*vrel(3) - rrel(3)*vrel(2), &
+           rrel(3)*vrel(1) - rrel(1)*vrel(3), &
+           rrel(1)*vrel(2) - rrel(2)*vrel(1) /)
+ hnorm = sqrt(sum(rrel**2))
+ if (hnorm <= 0.) then
+    print "(a)",' WARN: zero Earth-Apophis separation; using apophis_spin_axis'
+ else
+    rhat = rrel / hnorm
+    hnorm = sqrt(sum(hvec**2))
+    if (hnorm <= 0.) then
+       print "(a)",' WARN: collinear Earth-Apophis r,v; using apophis_spin_axis'
+    else
+       hn = hvec / hnorm
+       theta = torque_align_deg * pi / 180.
+       ct = cos(theta)
+       st = sin(theta)
+       kdotv = rhat(1)*hn(1) + rhat(2)*hn(2) + rhat(3)*hn(3)
+       nx = hn(1)*ct + (rhat(2)*hn(3) - rhat(3)*hn(2))*st + rhat(1)*kdotv*(1.-ct)
+       ny = hn(2)*ct + (rhat(3)*hn(1) - rhat(1)*hn(3))*st + rhat(2)*kdotv*(1.-ct)
+       nz = hn(3)*ct + (rhat(1)*hn(2) - rhat(2)*hn(1))*st + rhat(3)*kdotv*(1.-ct)
+       print "(a,1pg10.3,a)",' Apophis spin torque-align = ',torque_align_deg,' deg (0=+h, 180=-h)'
+       print "(a,3(1pg10.3,1x))",' Earth-Apophis h_hat (orbit normal) = ',hn(1),hn(2),hn(3)
+       print "(a,3(1pg10.3,1x))",' Earth-Apophis r_hat (separation) = ',rhat(1),rhat(2),rhat(3)
+       ok = .true.
+    endif
+ endif
+
+ if (.not.ok) then
+    if (present(spin_axis_fallback)) then
+       if (mag(spin_axis_fallback) > 0.) then
+          fallback = unitvec(spin_axis_fallback)
+          nx = fallback(1)
+          ny = fallback(2)
+          nz = fallback(3)
+       else
+          ierr = 1
+       endif
+    else
+       ierr = 1
+    endif
+ endif
+
+end subroutine compute_apophis_torque_align_spin_axis
 
 !----------------------------------------------------------------
 !+
@@ -805,11 +744,14 @@ subroutine write_setupfile(filename)
    'scale geocentric Earth-Apophis distance (1=ephemeris; apophis_only=F)',iunit)
  call write_inopt(scale_r_apophis,'scale_r_apophis','scaling factor for apophis radius',iunit)
  call write_inopt(scale_rho,'scale_rho','scaling factor for apophis bulk density',iunit)
+ call write_inopt(mass_apophis,'mass_apophis','apophis mass in g (0 = from scale_rho and actual body volume)',iunit)
  call write_inopt(apophis_shape_file,'apophis_shape_file','shape config file for lattice cropping',iunit)
  call write_inopt(apophis_spin_period,'apophis_spin_period','Apophis spin period in seconds (0=no spin)',iunit)
  call write_inopt(apophis_spin_axis(1),'apophis_spin_axis_x','Apophis spin axis, x component',iunit)
  call write_inopt(apophis_spin_axis(2),'apophis_spin_axis_y','Apophis spin axis, y component',iunit)
  call write_inopt(apophis_spin_axis(3),'apophis_spin_axis_z','Apophis spin axis, z component',iunit)
+ call write_inopt(apophis_spin_torque_align_deg,'apophis_spin_torque_align_deg',&
+   'spin axis in Earth-Apophis orbit plane (deg; -1=use axis vector)',iunit)
 
  close(iunit)
 
@@ -851,11 +793,13 @@ subroutine read_setupfile(filename,ierr)
  call read_inopt(scale_earth_sep,'scale_earth_sep',db,default=1.0,errcount=nerr)
  call read_inopt(scale_r_apophis,'scale_r_apophis',db,default=1.0,errcount=nerr)
  call read_inopt(scale_rho,'scale_rho',db,default=1.0,errcount=nerr)
+ call read_inopt(mass_apophis,'mass_apophis',db,min=0.,default=0.,errcount=nerr)
  call read_inopt(apophis_shape_file,'apophis_shape_file',db,default='apophis.shape',errcount=nerr)
  call read_inopt(apophis_spin_period,'apophis_spin_period',db,min=0.,errcount=nerr)
  call read_inopt(apophis_spin_axis(1),'apophis_spin_axis_x',db,errcount=nerr)
  call read_inopt(apophis_spin_axis(2),'apophis_spin_axis_y',db,errcount=nerr)
  call read_inopt(apophis_spin_axis(3),'apophis_spin_axis_z',db,errcount=nerr)
+ call read_inopt(apophis_spin_torque_align_deg,'apophis_spin_torque_align_deg',db,default=-1.0,errcount=nerr)
 
  call close_db(db)
 
